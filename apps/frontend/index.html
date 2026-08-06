@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spyglass — Observation Gear</title>
+    <!-- Loaded before the app bundle so window.__SPYGLASS_CONFIG__ (Faro
+         collector URL/app key, environment, faultsEnabled) is available the
+         moment main.tsx runs. In the container this file is generated at
+         startup from env vars by docker-entrypoint.sh; public/config.js is
+         the static local-dev stand-in. See src/config.ts. -->
+    <script src="/config.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

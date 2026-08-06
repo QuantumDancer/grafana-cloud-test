@@ -1,0 +1,265 @@
+/* Modest styling on purpose — this app exists to generate telemetry, not to
+   showcase design. A dark, starfield-adjacent palette gives it a bit of
+   telescope/lens charm without any real design investment. */
+
+:root {
+  color-scheme: dark;
+  --bg: #0f1420;
+  --panel: #171e2e;
+  --border: #2a3348;
+  --text: #e6e9f2;
+  --muted: #93a0bd;
+  --accent: #6fb1ff;
+  --danger: #ff8a8a;
+  --success: #7fe0a8;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+a {
+  color: var(--accent);
+}
+
+button, input, select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: var(--accent);
+  color: #0b1526;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.link-button {
+  background: none;
+  color: var(--accent);
+  padding: 0;
+  font-weight: normal;
+  text-decoration: underline;
+}
+
+input, select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.app-header__brand {
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.app-header__nav {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.app-header__nav a {
+  text-decoration: none;
+  color: var(--muted);
+}
+
+.app-header__nav a.active {
+  color: var(--accent);
+}
+
+.app-main {
+  flex: 1;
+  padding: 1.5rem;
+  max-width: 1000px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.app-footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.error-banner {
+  background: rgba(255, 138, 138, 0.12);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+}
+
+.catalog__controls {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.catalog__controls input[type='search'] {
+  flex: 1;
+  min-width: 200px;
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.product-card {
+  display: block;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.product-card__emoji {
+  font-size: 2rem;
+}
+
+.product-card h3 {
+  margin: 0.5rem 0 0.25rem;
+  font-size: 1rem;
+}
+
+.product-card__category, .product-card__price {
+  margin: 0.15rem 0;
+  color: var(--muted);
+}
+
+.product-card__stock--out {
+  color: var(--danger);
+}
+
+.catalog__pagination {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+.product-detail__main {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.product-detail__emoji {
+  font-size: 4rem;
+}
+
+.product-detail__reviews ul {
+  list-style: none;
+  padding: 0;
+}
+
+.product-detail__reviews li {
+  border-top: 1px solid var(--border);
+  padding: 0.75rem 0;
+}
+
+.star-rating {
+  color: #ffd479;
+}
+
+.back-link {
+  background: none;
+  color: var(--muted);
+  padding: 0;
+  margin-bottom: 1rem;
+}
+
+.cart__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cart__table th, .cart__table td {
+  text-align: left;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.cart__table input[type='number'] {
+  width: 4rem;
+}
+
+.cart__summary {
+  margin-top: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.checkout__summary {
+  list-style: none;
+  padding: 0;
+}
+
+.checkout__success {
+  color: var(--success);
+}
+
+.slow-page__table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+.slow-page__table th, .slow-page__table td {
+  text-align: left;
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.order-history-lookup form {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.app-crashed {
+  padding: 3rem;
+  text-align: center;
+}
