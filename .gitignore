@@ -1,0 +1,28 @@
+# OpenTofu — state stays local on purpose (ADR-0001), secrets live in untracked tfvars
+*.tfstate
+*.tfstate.*
+*.auto.tfvars
+*.tfvars.json
+.terraform/
+.terraform.lock.hcl.tmp
+
+# Build outputs
+apps/backend/target/
+apps/frontend/dist/
+apps/frontend/node_modules/
+node_modules/
+
+# Local scratch (issue tracker lives here on purpose — tracked; tmp/ is not)
+tmp/
+
+# IDE / OS noise
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Session log (per user convention: never committed)
+SESSION.md
+
+# Agent worktrees (transient build isolation)
+.claude/worktrees/
