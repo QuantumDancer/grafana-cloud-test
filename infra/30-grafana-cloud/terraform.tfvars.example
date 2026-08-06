@@ -1,0 +1,33 @@
+# Copy to terraform.auto.tfvars (untracked — see .gitignore) and fill in.
+# terraform.auto.tfvars is picked up automatically by `tofu plan`/`apply`,
+# no -var-file flag needed.
+
+# Portal-level Grafana Cloud access-policy token, created ONCE by hand at
+# https://grafana.com/orgs/<your-org>/access-policies (Administration >
+# Access Policies in the Cloud Portal). This single token is reused across
+# every portal-level call this component makes (stack lookup, access-policy
+# and k6-service-account management, the k6 App installation, the Synthetic
+# Monitoring installation) — it is NOT the stack-scoped tokens this
+# component creates and hands to 40-platform.
+#
+# Required scopes, by what each resource in this component needs:
+#   - data.grafana_cloud_stack               -> stacks:read
+#   - grafana_cloud_access_policy(_token)     -> accesspolicies:read, accesspolicies:write, accesspolicies:delete
+#   - grafana_k6_installation                 -> stacks:read, stacks:write, subscriptions:read, orgs:read, stack-service-accounts:write
+#   - grafana_cloud_stack_service_account(_token) (k6's SA) -> stack-service-accounts:write
+#   - grafana_synthetic_monitoring_installation -> stacks:read (the metrics-publisher token it needs is provisioned separately, below)
+# Union: accesspolicies:read|write|delete, stacks:read|write, stack-service-accounts:write, subscriptions:read, orgs:read
+grafana_cloud_access_policy_token = "glc_eyJ..."
+
+# Slug of the pre-existing, long-lived stack (e.g. "myorg" for myorg.grafana.net).
+stack_slug = "myorg"
+
+# Region for Cloud Access Policy management — find the exact value under
+# Access Policies > Create Access Policy in the portal (e.g. "prod-eu-west-3"
+# for Frankfurt). Defaults to "prod-eu-west-3"; override if your account's
+# access-policy region differs.
+# grafana_cloud_region = "prod-eu-west-3"
+
+# Grafana Cloud login/email used as the acting user for the k6 App
+# installation (grafana_k6_installation.grafana_user).
+grafana_user = "you@example.com"
