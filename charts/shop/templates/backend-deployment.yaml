@@ -1,0 +1,89 @@
+{{- if .Values.backend.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-backend
+  labels:
+    {{- include "shop.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: backend
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: backend
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # --- Database (CNPG-generated Secret, see values.yaml comment) ---
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.database.secretName }}
+                  key: jdbc-uri
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.database.secretName }}
+                  key: username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.backend.database.secretName }}
+                  key: password
+
+            # --- OpenTelemetry (Grafana OTel Java distribution javaagent baked into the image) ---
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.backend.otel.endpoint | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.backend.otel.serviceName | quote }}
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: {{ .Values.backend.otel.resourceAttributes | quote }}
+
+            # --- Planted faults (all default ON; see application.yml's relaxed binding) ---
+            - name: FAULT_SLOW_SEARCH
+              value: {{ .Values.backend.faults.slowSearch | quote }}
+            - name: FAULT_N_PLUS_ONE
+              value: {{ .Values.backend.faults.nPlusOne | quote }}
+            - name: FAULT_CHECKOUT_ERRORS
+              value: {{ .Values.backend.faults.checkoutErrors | quote }}
+            - name: FAULT_MEMORY_LEAK
+              value: {{ .Values.backend.faults.memoryLeak | quote }}
+            - name: FAULT_MEMORY_LEAK_MB_PER_MIN
+              value: {{ .Values.backend.faults.memoryLeakMbPerMin | quote }}
+
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+
+          # See values.yaml's livenessProbe/readinessProbe comments for why both
+          # target /api/health specifically (not Actuator's DB-checking one) and
+          # why liveness is tuned tight enough to actually trip on the memory-leak
+          # fault's GC degradation.
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.backend.livenessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.backend.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.backend.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.backend.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.backend.livenessProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.backend.readinessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.backend.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.backend.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.backend.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.backend.readinessProbe.failureThreshold }}
+{{- end }}

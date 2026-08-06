@@ -1,0 +1,56 @@
+{{- if .Values.frontend.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-frontend
+  labels:
+    {{- include "shop.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: frontend
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: frontend
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: frontend
+          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # Consumed by docker/docker-entrypoint.sh to regenerate config.js
+            # at container start — see apps/frontend/README.md's "Runtime
+            # configuration" section.
+            - name: FARO_COLLECTOR_URL
+              value: {{ .Values.frontend.faroCollectorUrl | quote }}
+            - name: FARO_APP_KEY
+              value: {{ .Values.frontend.faroAppKey | quote }}
+            - name: APP_ENVIRONMENT
+              value: {{ .Values.frontend.appEnvironment | quote }}
+            - name: FAULTS_ENABLED
+              value: {{ .Values.frontend.faultsEnabled | quote }}
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          # No app-level health endpoint (nginx serving static files); a plain
+          # TCP check on the listening port is all there is to probe.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: {{ .Values.frontend.probes.initialDelaySeconds }}
+            periodSeconds: {{ .Values.frontend.probes.periodSeconds }}
+            failureThreshold: {{ .Values.frontend.probes.failureThreshold }}
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: {{ .Values.frontend.probes.initialDelaySeconds }}
+            periodSeconds: {{ .Values.frontend.probes.periodSeconds }}
+            failureThreshold: {{ .Values.frontend.probes.failureThreshold }}
+{{- end }}

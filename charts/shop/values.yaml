@@ -1,0 +1,215 @@
+# Spyglass shop — default values.
+#
+# This chart is always installed into the `shop` namespace created by the
+# 40-platform tofu component (`helm upgrade -i spyglass charts/shop -n shop`
+# — see scripts/deploy-shop.sh); it deliberately never creates a Namespace
+# resource itself, since the CNPG database and the k8s-monitoring Database
+# Observability integration already depend on that namespace existing
+# independently of whether the shop app happens to be installed.
+
+# Per-component enable flags (issue 07): each top-level block's `enabled` key
+# below renders nothing when false, so e.g. `--set loadgen.enabled=false` can
+# pause synthetic traffic without tearing down the shop itself.
+
+backend:
+  enabled: true
+
+  image:
+    # REQUIRED: no public image exists at this placeholder path. The deploy
+    # script always passes --backend-tag (and expects a real repository to
+    # have been configured — see its --backend-repo flag) rather than
+    # shipping a working default, since "ghcr.io/OWNER-PLACEHOLDER/..." is a
+    # deliberately obvious sentinel that fails loudly (ImagePullBackOff)
+    # instead of silently deploying nothing.
+    repository: ghcr.io/OWNER-PLACEHOLDER/grafana-cloud-test/backend
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    port: 8080
+
+  # Modest: this is a demo app generating telemetry, not serving real
+  # traffic. Kept low enough that FAULT_MEMORY_LEAK's ~2 MiB/min default
+  # growth rate fills the container's memory budget (and starts causing GC
+  # pressure that the liveness probe below can detect) within a demo-able
+  # timeframe rather than taking days.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # /api/health (HealthController) deliberately does zero DB work — see its
+  # doc comment in the backend source — specifically so a Postgres blip
+  # doesn't also fail the pod's liveness probe. That makes it the right
+  # target for both probes here; Actuator's own /actuator/health (which does
+  # check the DB) is left for manual/Kubernetes-Monitoring-style inspection
+  # instead.
+  #
+  # Liveness is tuned to actually restart the pod once FAULT_MEMORY_LEAK
+  # degrades it: as heap fills, GC pauses lengthen and eventually the JVM
+  # can't service an HTTP request within timeoutSeconds, so a handful of
+  # periodSeconds=10 failures on a short failureThreshold trips a restart —
+  # producing the intended sawtooth memory graph in Kubernetes Monitoring.
+  livenessProbe:
+    path: /api/health
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  # Readiness is intentionally a little more patient than liveness — a
+  # transient slow GC pause should pull the pod out of Service rotation
+  # before it's bad enough to warrant a full restart.
+  readinessProbe:
+    path: /api/health
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  otel:
+    serviceName: spyglass-backend
+    # Grafana's OTel Java distribution image (see the backend Dockerfile)
+    # defaults to OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf against port
+    # 4318 — this endpoint is left matching that protocol rather than
+    # switching to the chart's gRPC (4317) alternative, so only the
+    # *endpoint* needs overriding here, not the protocol too.
+    endpoint: http://k8s-monitoring-alloy-metrics.monitoring.svc.cluster.local:4318
+    resourceAttributes: service.namespace=shop,deployment.environment=test
+
+  # Planted-fault toggles (issue spec, all default ON). Mirrors the
+  # backend's own application.yml defaults explicitly here so the chart is a
+  # complete, self-documenting control surface for demo purposes — a values
+  # override doesn't require knowing the backend's internal property names.
+  faults:
+    slowSearch: true
+    nPlusOne: true
+    checkoutErrors: true
+    memoryLeak: true
+    memoryLeakMbPerMin: 2
+
+  # Where the CNPG Cluster's initdb-generated app-user Secret lives (see
+  # infra/40-platform/cloudnative-pg.tf: `kubernetes_manifest.shop_db`'s
+  # `bootstrap.initdb.secret.name`, mirrored by its `cnpg_app_secret_name`
+  # output). CNPG's generated Secret carries username/password/dbname/host/
+  # port/uri/jdbc-uri keys; `jdbc-uri` is used directly for
+  # SPRING_DATASOURCE_URL since Spring's relaxed binding expects a JDBC URL,
+  # not the plain libpq `uri` key.
+  database:
+    secretName: shop-db-app-credentials
+
+frontend:
+  enabled: true
+
+  image:
+    # Same placeholder convention as backend.image.repository above.
+    repository: ghcr.io/OWNER-PLACEHOLDER/grafana-cloud-test/frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    port: 8080
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+  # nginx serves the static bundle unconditionally once running — a cheap
+  # TCP-level check on the listening port is enough for both probes here,
+  # there's no app-level health endpoint to call.
+  probes:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    failureThreshold: 3
+
+  # Faro collector URL/app key are per-environment runtime config, not
+  # build-time constants — see apps/frontend/README.md's "Runtime
+  # configuration" section. deploy-shop.sh sets faroCollectorUrl from
+  # `tofu output -raw faro_collector_endpoint` (30-grafana-cloud); the
+  # `grafana_frontend_o11y_app` resource exposes no separate app key
+  # (research doc: the hosted collector's per-app URL is itself the
+  # documented, complete credential), so faroAppKey stays empty — the
+  # frontend's own initFaro() treats an empty key as "omit the header",
+  # not "Faro disabled" (only an empty collector URL does that).
+  faroCollectorUrl: ""
+  faroAppKey: ""
+  appEnvironment: test
+  faultsEnabled: true
+
+# The platform Gateway (infra/40-platform/envoy-gateway.tf) this chart's
+# HTTPRoute attaches to via parentRefs — cross-namespace (Gateway lives in
+# `gateway`, this chart's resources live in `shop`), which the Gateway's own
+# `allowedRoutes.namespaces.from: All` permits.
+gateway:
+  namespace: gateway
+  name: external
+
+# Public hostname (infra/40-platform locals.shop_hostname / outputs.shop_hostname).
+hostname: shop.rottlr.de
+
+loadgen:
+  enabled: true
+
+  # Fully-qualified, verified to exist on Docker Hub (2026-08-06): the
+  # official grafana/k6 image's `2.1.0` tag — see final report for the
+  # verification evidence. Pinned to a specific version rather than
+  # `:latest`/`:master` so a chart install is reproducible.
+  image: docker.io/grafana/k6:2.1.0
+  pullPolicy: IfNotPresent
+
+  # In-cluster target: the backend Service this same chart renders, so no
+  # separate DNS lookup/config is needed even before the frontend/HTTPRoute
+  # are up. deploy-shop.sh leaves this at its default — only the standalone
+  # `k6 cloud` invocation (load/README.md) points at the public hostname's
+  # /api instead.
+  baseUrl: ""
+
+  # k6 run stdout is the only output sink (no `k6 cloud`/`--out` wired
+  # in-cluster) — good enough for demo purposes; the CLI output can be read
+  # via `kubectl logs` if anything looks wrong. Filled in by
+  # scripts/deploy-shop.sh via `--set-file loadgen.script=load/k6/shop-load.js`.
+  script: ""
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+browserloop:
+  enabled: true
+
+  # The `-with-browser` variant ships a bundled Chromium alongside the k6
+  # binary — verified to exist on Docker Hub alongside the plain image above
+  # (same tag line, `-with-browser` suffix).
+  image: docker.io/grafana/k6:2.1.0-with-browser
+  pullPolicy: IfNotPresent
+
+  # MUST stay the public hostname, not an in-cluster Service URL: the
+  # `grafana_frontend_o11y_app` resource's `allowed_origins` only lists
+  # `https://shop.rottlr.de` (infra/30-grafana-cloud/frontend-observability.tf),
+  # and the hosted Faro Collector enforces CORS against that allowlist — a
+  # cluster-internal origin would have every beacon silently rejected. See
+  # also the comment at the top of load/browser/shop-browser.js.
+  targetUrl: https://shop.rottlr.de
+
+  script: ""
+
+  # Chromium is meaningfully heavier than the plain HTTP load generator, so
+  # this gets its own, larger budget rather than sharing loadgen's.
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi

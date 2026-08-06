@@ -1,0 +1,67 @@
+{{- if .Values.loadgen.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-loadgen-script
+  labels:
+    {{- include "shop.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loadgen
+data:
+  shop-load.js: |
+{{ .Values.loadgen.script | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-loadgen
+  labels:
+    {{- include "shop.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loadgen
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: loadgen
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: loadgen
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+        # Forces a rollout when only the mounted script content changes —
+        # ConfigMap volume updates otherwise propagate to the pod's
+        # filesystem eventually (kubelet sync period) but k6 itself never
+        # notices/reloads a running script anyway.
+        checksum/script: {{ .Values.loadgen.script | sha256sum }}
+    spec:
+      # k6's own process exit (whenever the script's scenario finishes its
+      # bounded duration — see shop-load.js's comment on why it isn't
+      # literally infinite) is exactly what should trigger the next run;
+      # the Deployment's implicit restartPolicy: Always on the Pod template
+      # is what gives "continuous" load without k6 needing to loop
+      # internally or this chart needing a CronJob.
+      containers:
+        - name: k6
+          image: {{ .Values.loadgen.image }}
+          imagePullPolicy: {{ .Values.loadgen.pullPolicy }}
+          args:
+            - run
+            - /scripts/shop-load.js
+          env:
+            # Empty by default: shop-load.js falls back to the in-cluster
+            # backend Service DNS name itself when unset, so this only needs
+            # overriding for a one-off pointed elsewhere.
+            - name: BASE_URL
+              value: {{ .Values.loadgen.baseUrl | default (printf "http://%s-backend:%v" .Release.Name .Values.backend.service.port) | quote }}
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+              readOnly: true
+          resources:
+            {{- toYaml .Values.loadgen.resources | nindent 12 }}
+      volumes:
+        - name: script
+          configMap:
+            name: {{ .Release.Name }}-loadgen-script
+{{- end }}

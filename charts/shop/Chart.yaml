@@ -1,0 +1,9 @@
+apiVersion: v2
+name: shop
+description: >-
+  Spyglass — the Grafana Cloud test stack's demo web shop (backend, frontend,
+  in-cluster k6 load generator, and browser-driven Faro traffic loop).
+type: application
+version: 0.1.0
+# No `appVersion` pin: backend/frontend images are tagged per-deploy by
+# scripts/deploy-shop.sh (--backend-tag/--frontend-tag), not by the chart.

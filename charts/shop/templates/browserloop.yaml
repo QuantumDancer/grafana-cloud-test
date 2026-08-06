@@ -1,0 +1,69 @@
+{{- if .Values.browserloop.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-browserloop-script
+  labels:
+    {{- include "shop.labels" . | nindent 4 }}
+    app.kubernetes.io/component: browserloop
+data:
+  shop-browser.js: |
+{{ .Values.browserloop.script | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-browserloop
+  labels:
+    {{- include "shop.labels" . | nindent 4 }}
+    app.kubernetes.io/component: browserloop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: browserloop
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: browserloop
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+        checksum/script: {{ .Values.browserloop.script | sha256sum }}
+    spec:
+      containers:
+        - name: k6-browser
+          image: {{ .Values.browserloop.image }}
+          imagePullPolicy: {{ .Values.browserloop.pullPolicy }}
+          args:
+            - run
+            - /scripts/shop-browser.js
+          env:
+            # Required by k6's browser module to enable the browser-test API
+            # at all (undocumented-by-default otherwise); headless is the
+            # only sane mode for a cluster pod with no display.
+            - name: K6_BROWSER_HEADLESS
+              value: "true"
+            - name: TARGET_URL
+              value: {{ .Values.browserloop.targetUrl | quote }}
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+              readOnly: true
+            # Chromium's default /dev/shm (64 MiB from the container
+            # runtime) is too small and causes renderer crashes under real
+            # use; mounting a larger tmpfs here is the standard fix (same
+            # one Docker's own --shm-size flag addresses outside Kubernetes).
+            - name: dshm
+              mountPath: /dev/shm
+          resources:
+            {{- toYaml .Values.browserloop.resources | nindent 12 }}
+      volumes:
+        - name: script
+          configMap:
+            name: {{ .Release.Name }}-browserloop-script
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 512Mi
+{{- end }}

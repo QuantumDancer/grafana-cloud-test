@@ -14,3 +14,11 @@ Loadgen/browserloop: run images from `load/` (issue 08).
 
 Done: on a live platform, `deploy-shop.sh` brings the Shop up at https://shop.rottlr.de;
 faults demonstrable; `helm uninstall` clean.
+
+## Comments
+
+2026-08-06: Built and statically verified (executor + main session): helm lint --strict
+clean, template renders all 9 resources with correct enable-flag trimming, shellcheck clean,
+names cross-checked against 40-platform (`shop-db-app-credentials`, Alloy OTLP HTTP :4318,
+gateway/external). `deploy-shop.sh` requires explicit `--backend-repo`/`--frontend-repo`.
+Live done-criteria await issue 10.
