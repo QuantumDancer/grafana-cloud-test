@@ -10,7 +10,10 @@ resource "kubernetes_namespace_v1" "envoy_gateway_system" {
 resource "helm_release" "envoy_gateway" {
   name = "eg"
   # The chart is only published as an OCI artifact, not a classic Helm repo index.
-  repository = "oci://docker.io/envoyproxy/gateway-helm"
+  # The repository is the OCI namespace only — the provider appends `chart` to it,
+  # so including the chart name here would double it (found empirically: 401 on
+  # docker.io/envoyproxy/gateway-helm/gateway-helm).
+  repository = "oci://docker.io/envoyproxy"
   chart      = "gateway-helm"
   version    = "1.8.3" # verified via `helm show chart oci://docker.io/envoyproxy/gateway-helm`
   namespace  = kubernetes_namespace_v1.envoy_gateway_system.metadata[0].name
@@ -23,8 +26,9 @@ resource "helm_release" "envoy_gateway" {
 
 # The GatewayClass name/controllerName pair below is Envoy Gateway's own documented default
 # (see its quickstart.yaml release asset) — using it as-is rather than inventing a new one.
-resource "kubernetes_manifest" "envoy_gatewayclass" {
-  manifest = {
+resource "kubectl_manifest" "envoy_gatewayclass" {
+  server_side_apply = true
+  yaml_body = yamlencode({
     apiVersion = "gateway.networking.k8s.io/v1"
     kind       = "GatewayClass"
     metadata = {
@@ -33,7 +37,7 @@ resource "kubernetes_manifest" "envoy_gatewayclass" {
     spec = {
       controllerName = "gateway.envoyproxy.io/gatewayclass-controller"
     }
-  }
+  })
 
   depends_on = [helm_release.envoy_gateway]
 }
@@ -47,8 +51,9 @@ resource "kubernetes_namespace_v1" "gateway" {
 # The externally reachable Gateway: one HTTPS listener terminating TLS for shop.rottlr.de, plus a
 # plain HTTP listener (the shop chart's HTTPRoute is expected to redirect it to HTTPS). Routes are
 # allowed from every namespace so future services can attach without touching this component.
-resource "kubernetes_manifest" "external_gateway" {
-  manifest = {
+resource "kubectl_manifest" "external_gateway" {
+  server_side_apply = true
+  yaml_body = yamlencode({
     apiVersion = "gateway.networking.k8s.io/v1"
     kind       = "Gateway"
     metadata = {
@@ -89,15 +94,16 @@ resource "kubernetes_manifest" "external_gateway" {
         }
       ]
     }
-  }
+  })
 
-  depends_on = [kubernetes_manifest.envoy_gatewayclass]
+  depends_on = [kubectl_manifest.envoy_gatewayclass]
 }
 
 # The Certificate cert-manager renews into the `shop-tls-cert` Secret the Gateway's HTTPS listener
 # references above.
-resource "kubernetes_manifest" "shop_certificate" {
-  manifest = {
+resource "kubectl_manifest" "shop_certificate" {
+  server_side_apply = true
+  yaml_body = yamlencode({
     apiVersion = "cert-manager.io/v1"
     kind       = "Certificate"
     metadata = {
@@ -112,7 +118,7 @@ resource "kubernetes_manifest" "shop_certificate" {
       }
       dnsNames = [local.shop_hostname]
     }
-  }
+  })
 
-  depends_on = [kubernetes_manifest.letsencrypt_cluster_issuer]
+  depends_on = [kubectl_manifest.letsencrypt_cluster_issuer]
 }

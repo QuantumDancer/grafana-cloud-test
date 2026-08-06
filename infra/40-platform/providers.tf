@@ -32,3 +32,15 @@ provider "kubernetes" {
     args        = local.eks_get_token_args
   }
 }
+
+provider "kubectl" {
+  host                   = local.cluster_endpoint
+  cluster_ca_certificate = local.cluster_ca
+  load_config_file       = false
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = local.eks_get_token_args
+  }
+}

@@ -43,8 +43,9 @@ resource "kubernetes_secret_v1" "cloudflare_api_token_cert_manager" {
 
 # cert-manager's CRDs only exist once the chart above has actually installed them, so every
 # kubernetes_manifest resource for a cert-manager CRD in this component depends on this release.
-resource "kubernetes_manifest" "letsencrypt_cluster_issuer" {
-  manifest = {
+resource "kubectl_manifest" "letsencrypt_cluster_issuer" {
+  server_side_apply = true
+  yaml_body = yamlencode({
     apiVersion = "cert-manager.io/v1"
     kind       = "ClusterIssuer"
     metadata = {
@@ -71,7 +72,7 @@ resource "kubernetes_manifest" "letsencrypt_cluster_issuer" {
         ]
       }
     }
-  }
+  })
 
   depends_on = [helm_release.cert_manager]
 }

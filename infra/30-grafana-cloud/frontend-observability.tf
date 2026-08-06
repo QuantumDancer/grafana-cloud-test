@@ -34,7 +34,11 @@ resource "grafana_cloud_access_policy_token" "frontend_o11y" {
 }
 
 provider "grafana" {
-  alias                          = "frontend_o11y"
+  alias = "frontend_o11y"
+  # The resource needs both clients: the frontend-o11y API does the actual app
+  # management, but the provider also resolves the stack through the Cloud API
+  # and hard-errors without this token (found empirically on first apply).
+  cloud_access_policy_token      = var.grafana_cloud_access_policy_token
   frontend_o11y_api_access_token = grafana_cloud_access_policy_token.frontend_o11y.token
 }
 

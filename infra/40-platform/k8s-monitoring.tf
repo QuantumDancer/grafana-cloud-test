@@ -82,6 +82,18 @@ resource "helm_release" "k8s_monitoring" {
         collector = "alloy-metrics"
       }
 
+      # Chart v4 never deploys telemetry services implicitly ("no silent deployments"):
+      # clusterMetrics validates that kube-state-metrics/node-exporter exist, and fails
+      # the install unless they're either deployed here or label-matched to existing ones.
+      telemetryServices = {
+        "kube-state-metrics" = {
+          deploy = true
+        }
+        "node-exporter" = {
+          deploy = true
+        }
+      }
+
       clusterEvents = {
         enabled   = true
         collector = "alloy-metrics"
@@ -158,7 +170,7 @@ resource "helm_release" "k8s_monitoring" {
   ]
 
   depends_on = [
-    kubernetes_manifest.shop_db,
+    kubectl_manifest.shop_db,
     kubernetes_secret_v1.db_o11y_credentials,
   ]
 }

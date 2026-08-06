@@ -32,8 +32,11 @@ resource "random_password" "db_o11y" {
 # `postInitSQL` runs as the PostgreSQL superuser during cluster bootstrap, so it's the only place
 # we can create a second role beyond the `owner` CNPG's `initdb` bootstrap creates automatically.
 # Per CNPG's own docs, treat this with care: a mistake here breaks bootstrap for the whole cluster.
-resource "kubernetes_manifest" "shop_db" {
-  manifest = {
+resource "kubectl_manifest" "shop_db" {
+  server_side_apply = true
+  # postInitSQL interpolates the db-o11y password — keep it out of plan output.
+  sensitive_fields = ["spec.bootstrap.initdb.postInitSQL"]
+  yaml_body = yamlencode({
     apiVersion = "postgresql.cnpg.io/v1"
     kind       = "Cluster"
     metadata = {
@@ -79,7 +82,7 @@ resource "kubernetes_manifest" "shop_db" {
         }
       }
     }
-  }
+  })
 
   depends_on = [helm_release.cloudnative_pg, kubernetes_storage_class_v1.auto_ebs_gp3]
 }
