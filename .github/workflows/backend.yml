@@ -4,6 +4,9 @@ name: backend
 # The workflow file itself is included in the filter so edits to it are
 # always exercised on their own PR.
 on:
+  # Manual dispatch exists because the apps landed on main before these workflows
+  # did — the path filter would otherwise never fire until the next app change.
+  workflow_dispatch:
   push:
     branches: [main]
     paths:

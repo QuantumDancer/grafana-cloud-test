@@ -2,6 +2,9 @@ name: frontend
 
 # Path-filtered so backend-only changes don't spin up a Node toolchain.
 on:
+  # Manual dispatch exists because the apps landed on main before these workflows
+  # did — the path filter would otherwise never fire until the next app change.
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
