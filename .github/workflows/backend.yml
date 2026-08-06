@@ -1,0 +1,86 @@
+name: backend
+
+# Path-filtered so frontend-only changes don't burn a JDK + Testcontainers run.
+# The workflow file itself is included in the filter so edits to it are
+# always exercised on their own PR.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/backend/**"
+      - ".github/workflows/backend.yml"
+  pull_request:
+    paths:
+      - "apps/backend/**"
+      - ".github/workflows/backend.yml"
+
+# contents:read is enough for checkout + build; packages:write is only needed
+# to push to GHCR, which only happens on push to main (see the `push:` input
+# below) — PR runs never exercise it, but the job still declares it since the
+# push step lives in the same job as the build/test steps.
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}/backend
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/backend
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 25 (temurin)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      # Testcontainers needs a real Docker daemon for the integration-tests
+      # profile; ubuntu-latest runners ship one, so this doubles as both the
+      # unit and integration suite rather than requiring a separate service.
+      - name: Run unit + integration tests
+        run: ./mvnw --batch-mode verify -Pintegration-tests
+
+      # Builds on every PR (to catch Dockerfile breakage) but only pushes on
+      # main — buildx's `push:` input below gates that, not a separate job,
+      # so the multi-stage build cache is shared between the validate-only
+      # and publish paths.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # amd64 only: the test EKS Auto Mode cluster's general-purpose node
+      # pool defaults to amd64, and this is a disposable test stack, not a
+      # multi-arch product — not worth the extra QEMU build time.
+      - name: Build (and push on main) image
+        uses: docker/build-push-action@v7
+        with:
+          context: apps/backend
+          platforms: linux/amd64
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

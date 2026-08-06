@@ -1,0 +1,143 @@
+name: frontend
+
+# Path-filtered so backend-only changes don't spin up a Node toolchain.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/frontend/**"
+      - ".github/workflows/frontend.yml"
+  pull_request:
+    paths:
+      - "apps/frontend/**"
+      - ".github/workflows/frontend.yml"
+
+# contents:read is enough for checkout + build; packages:write is only needed
+# to push to GHCR, which only happens on push to main (see the `push:` input
+# on the image build step below) — PR runs never exercise it.
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}/frontend
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      # pnpm/setup replaces both pnpm/action-setup and actions/setup-node in
+      # one step for pnpm v11+ (action-setup doesn't support v11); it reads
+      # the pnpm version from package.json's packageManager field, same as
+      # the Dockerfile's `corepack prepare pnpm@11` — so this and the image
+      # build always use the same pnpm release.
+      - name: Set up pnpm + Node
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        with:
+          runtime: node@24
+          cache: true
+          # Action inputs resolve from the repo root regardless of this
+          # job's `defaults.run.working-directory`, so these need the full
+          # apps/frontend/ prefix even though the run steps below don't.
+          cache-dependency-path: apps/frontend/pnpm-lock.yaml
+          package-json-file: apps/frontend/package.json
+          # We run our own install below with --frozen-lockfile explicitly
+          # rather than relying on the action's default post-setup install.
+          install: false
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+      # Emits dist/ with .map files alongside every asset (vite.config.ts
+      # sets build.sourcemap: true) — the Dockerfile only strips maps out of
+      # its *own* internal build stage, so this plain host-side build is the
+      # simplest source of maps for the upload step below without needing a
+      # `docker build --target sourcemaps --output ...` export just for CI.
+      - run: pnpm build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # amd64 only: the test EKS Auto Mode cluster's general-purpose node
+      # pool defaults to amd64, and this is a disposable test stack, not a
+      # multi-arch product — not worth the extra QEMU build time.
+      - name: Build (and push on main) image
+        uses: docker/build-push-action@v7
+        with:
+          context: apps/frontend
+          platforms: linux/amd64
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Source maps are private-uploaded (never shipped in the served image
+      # — see the Dockerfile's `sourcemaps` export stage) so Faro can
+      # deobfuscate minified stack traces. The token is the one GitHub
+      # secret this repo needs (per spec); the three FARO_* values are repo
+      # variables rather than secrets since they're identifiers, not
+      # credentials. All four are unset before the Grafana Cloud Frontend
+      # App is provisioned and absent entirely on fork PRs (no repo
+      # secrets/vars) — skip gracefully rather than failing the build.
+      - name: Check Faro source map upload configuration
+        id: faro
+        env:
+          FARO_TOKEN: ${{ secrets.FARO_SOURCEMAP_TOKEN }}
+          FARO_ENDPOINT: ${{ vars.FARO_SOURCEMAP_ENDPOINT }}
+          FARO_APP_ID: ${{ vars.FARO_APP_ID }}
+          FARO_STACK_ID: ${{ vars.FARO_STACK_ID }}
+        run: |
+          if [ -n "$FARO_TOKEN" ] && [ -n "$FARO_ENDPOINT" ] && [ -n "$FARO_APP_ID" ] && [ -n "$FARO_STACK_ID" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Skipping Faro source map upload — FARO_SOURCEMAP_TOKEN secret and/or FARO_SOURCEMAP_ENDPOINT/FARO_APP_ID/FARO_STACK_ID repository variables are not set (expected on fork PRs and before the Grafana Cloud Frontend App is provisioned)."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # CLI (not the Rollup/Vite bundler plugin) so no devDependency needs
+      # adding to the app just for CI; `pnpm dlx` fetches it on demand, same
+      # mechanism as `npx` but consistent with the rest of this pnpm project.
+      # bundle-id is pinned to the commit sha to line up with the image tag
+      # above — see SESSION.md for the caveat that the frontend doesn't yet
+      # set a matching `app.version` in its Faro init, which the docs imply
+      # runtime stack traces need for automatic map matching.
+      - name: Upload source maps to Grafana Faro
+        if: steps.faro.outputs.configured == 'true'
+        env:
+          FARO_TOKEN: ${{ secrets.FARO_SOURCEMAP_TOKEN }}
+          FARO_ENDPOINT: ${{ vars.FARO_SOURCEMAP_ENDPOINT }}
+          FARO_APP_ID: ${{ vars.FARO_APP_ID }}
+          FARO_STACK_ID: ${{ vars.FARO_STACK_ID }}
+        run: |
+          pnpm dlx @grafana/faro-cli@0.11.0 upload \
+            --endpoint "$FARO_ENDPOINT" \
+            --app-id "$FARO_APP_ID" \
+            --api-key "$FARO_TOKEN" \
+            --stack-id "$FARO_STACK_ID" \
+            --app-name spyglass-frontend \
+            --bundle-id "${{ github.sha }}" \
+            --output-path dist \
+            --verbose

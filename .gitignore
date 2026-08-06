@@ -1,8 +1,12 @@
-# OpenTofu — state stays local on purpose (ADR-0001), secrets live in untracked tfvars
+# OpenTofu — state stays local on purpose (ADR-0001), secrets live in untracked tfvars.
+# All tfvars variants are ignored (only the .example templates are tracked) so a stray
+# `git add` can never commit a real token.
 *.tfstate
 *.tfstate.*
+*.tfvars
 *.auto.tfvars
 *.tfvars.json
+!*.tfvars.example
 .terraform/
 .terraform.lock.hcl.tmp
 
