@@ -15,9 +15,14 @@ output "prometheus_remote_write_url" {
   value       = data.grafana_cloud_stack.this.prometheus_remote_write_endpoint
 }
 
+# All *_username outputs are tostring()ed: the provider exposes these ids as
+# numbers, and numbers above 1e6 survive tofu fine but come out of 40-platform's
+# yamlencode() in scientific notation ("2.244577e+06") — which Grafana Cloud
+# rejected live with 401 invalid authentication credentials. Strings encode
+# verbatim.
 output "prometheus_username" {
   description = "Basic-auth username (instance/user id) for the Prometheus remote_write endpoint."
-  value       = data.grafana_cloud_stack.this.prometheus_user_id
+  value       = tostring(data.grafana_cloud_stack.this.prometheus_user_id)
 }
 
 # Provider attribute is `logs_*`; underlying instance is Loki.
@@ -31,7 +36,7 @@ output "loki_url" {
 
 output "loki_username" {
   description = "Basic-auth username (instance/user id) for the Loki push endpoint."
-  value       = data.grafana_cloud_stack.this.logs_user_id
+  value       = tostring(data.grafana_cloud_stack.this.logs_user_id)
 }
 
 # Same bare-host caveat as loki_url: the gateway serves OTLP under /otlp
@@ -46,7 +51,7 @@ output "otlp_url" {
 # unlike the per-signal endpoints which each have their own user id.
 output "otlp_username" {
   description = "Basic-auth username for the OTLP endpoint (the stack id)."
-  value       = data.grafana_cloud_stack.this.id
+  value       = tostring(data.grafana_cloud_stack.this.id)
 }
 
 output "tempo_url" {
@@ -56,7 +61,7 @@ output "tempo_url" {
 
 output "tempo_username" {
   description = "Basic-auth username (instance/user id) for the Tempo endpoint."
-  value       = data.grafana_cloud_stack.this.traces_user_id
+  value       = tostring(data.grafana_cloud_stack.this.traces_user_id)
 }
 
 output "destinations_token" {

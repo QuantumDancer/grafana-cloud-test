@@ -31,17 +31,19 @@ backend:
   service:
     port: 8080
 
-  # Modest: this is a demo app generating telemetry, not serving real
-  # traffic. Kept low enough that FAULT_MEMORY_LEAK's ~2 MiB/min default
+  # Memory kept low enough that FAULT_MEMORY_LEAK's ~2 MiB/min default
   # growth rate fills the container's memory budget (and starts causing GC
   # pressure that the liveness probe below can detect) within a demo-able
-  # timeframe rather than taking days.
+  # timeframe rather than taking days. The CPU request reflects what the JVM
+  # actually uses at boot — first live run under-requested at 100m, which let
+  # everything schedule onto one 2-vCPU node and starve the whole stack
+  # (requests are also what drives EKS Auto Mode scale-out).
   resources:
     requests:
-      cpu: 100m
+      cpu: 500m
       memory: 256Mi
     limits:
-      cpu: 500m
+      cpu: 1000m
       memory: 512Mi
 
   # Boot protection: Spring Boot plus the OTel javaagent under the 500m CPU
@@ -221,10 +223,13 @@ browserloop:
   script: ""
 
   # Chromium is meaningfully heavier than the plain HTTP load generator, so
-  # this gets its own, larger budget rather than sharing loadgen's.
+  # this gets its own, larger budget rather than sharing loadgen's. The CPU
+  # request matches the limit because a browser under constant load really
+  # does sustain that usage — under-requesting it was a main contributor to
+  # the first live run's single-node CPU starvation.
   resources:
     requests:
-      cpu: 250m
+      cpu: 1000m
       memory: 512Mi
     limits:
       cpu: 1000m

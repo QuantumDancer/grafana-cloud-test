@@ -51,6 +51,22 @@ resource "kubectl_manifest" "shop_db" {
         storageClass = kubernetes_storage_class_v1.auto_ebs_gp3.metadata[0].name
       }
 
+      # Real requests, not just "whatever's free": on the first live run the whole
+      # stack landed on one 2-vCPU node, and CPU starvation made the instance
+      # manager miss its API lease renewals — CNPG's primary then self-fenced
+      # (repeated "Failed to renew lease" → "Shutting down instance" cycles).
+      # Requests also drive EKS Auto Mode's scale-out, so sizing them honestly
+      # spreads the stack across nodes.
+      resources = {
+        requests = {
+          cpu    = "500m"
+          memory = "1Gi"
+        }
+        limits = {
+          memory = "1Gi"
+        }
+      }
+
       # No `imageName`: leaves the operator's own default PostgreSQL image (currently major
       # version 18) in place rather than pinning a tag we'd have to keep in sync by hand.
       bootstrap = {
