@@ -1,0 +1,50 @@
+# Local dev stack: Postgres (with pg_stat_statements preloaded, for Database Observability) +
+# the Spyglass backend. Not meant for production — see README.md for how this differs from the
+# EKS/k8s-monitoring deployment this app is ultimately destined for.
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: spyglass
+      POSTGRES_USER: spyglass
+      POSTGRES_PASSWORD: spyglass
+    # pg_stat_statements needs to be in shared_preload_libraries (a restart-only setting) before
+    # its extension can be created; the CREATE EXTENSION itself happens via db-init/ below.
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
+    ports:
+      - "5432:5432"
+    volumes:
+      - spyglass-postgres-data:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spyglass -d spyglass"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/spyglass
+      SPRING_DATASOURCE_USERNAME: spyglass
+      SPRING_DATASOURCE_PASSWORD: spyglass
+      # No OTLP collector in this local-dev compose file by default — the image's own OTEL_*
+      # defaults point at localhost:4318, which resolves to nothing useful inside this
+      # container. Point OTEL_EXPORTER_OTLP_ENDPOINT at a local Alloy/Collector (or comment the
+      # javaagent out entirely) if you want traces out of a compose-only run; see README.md.
+      FAULT_SLOW_SEARCH: "true"
+      FAULT_N_PLUS_ONE: "true"
+      FAULT_CHECKOUT_ERRORS: "true"
+      FAULT_MEMORY_LEAK: "true"
+      FAULT_MEMORY_LEAK_MB_PER_MIN: "2"
+    ports:
+      - "8080:8080"
+
+volumes:
+  spyglass-postgres-data:

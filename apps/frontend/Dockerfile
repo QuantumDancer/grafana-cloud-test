@@ -5,7 +5,8 @@
 # maps. Kept as its own stage (rather than building straight into the nginx
 # stage) purely so the maps can be pulled out of `dist/` before the runtime
 # stage ever copies it — see the `sourcemaps` stage below.
-FROM node:24-alpine AS build
+# Fully-qualified registry names: podman enforces them (docker resolves short names itself)
+FROM docker.io/library/node:24-alpine AS build
 WORKDIR /app
 
 # Corepack ships with Node and pins pnpm to the version recorded in
@@ -17,7 +18,9 @@ RUN corepack enable && corepack prepare pnpm@11 --activate
 # Installing from the lockfile before copying the rest of the source means
 # `pnpm install` only re-runs on a real dependency change, not on every code
 # edit — meaningfully faster iterative builds.
-COPY package.json pnpm-lock.yaml ./
+# pnpm-workspace.yaml must ride along: it carries the allowBuilds approval for
+# msw's post-install script, without which pnpm 11 aborts the install.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY . .
@@ -40,16 +43,17 @@ COPY --from=build /sourcemaps /
 # nginx-unprivileged already runs as a non-root user on port 8080 with
 # writable paths pre-arranged for that user, so no manual USER/chown
 # juggling is needed here.
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
+FROM docker.io/nginxinc/nginx-unprivileged:1.27-alpine AS runtime
 
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
-COPY docker/docker-entrypoint.sh /docker-entrypoint.d/50-spyglass-config.sh
 # The base image's own entrypoint already runs every executable script under
 # /docker-entrypoint.d/ before starting nginx, in filename order — the `50-`
 # prefix just gives config generation an explicit, obvious place in that
-# sequence relative to any scripts the base image ships.
-RUN chmod +x /docker-entrypoint.d/50-spyglass-config.sh
+# sequence relative to any scripts the base image ships. --chmod sets the
+# execute bit at copy time: the unprivileged base runs as UID 101, which may
+# not chmod a root-owned file in a later RUN step.
+COPY --chmod=0755 docker/docker-entrypoint.sh /docker-entrypoint.d/50-spyglass-config.sh
 
 EXPOSE 8080

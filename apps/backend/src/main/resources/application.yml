@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: spyglass-backend
+
+  # Standard SPRING_DATASOURCE_* env vars (Spring Boot's relaxed binding) override these at
+  # runtime; the literal values below are only the local-dev fallback (see compose.yaml).
+  datasource:
+    url: jdbc:postgresql://localhost:5432/spyglass
+    username: spyglass
+    password: spyglass
+
+  jpa:
+    # We own the schema entirely through Flyway migrations — letting Hibernate validate against
+    # it (rather than update/create-drop) catches entity/migration drift at startup instead of
+    # silently patching the schema in a demo environment nobody is watching closely.
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        # Batch inserts/updates so the ~100k-order seed and any bulk checkout traffic don't
+        # generate one round-trip per row — also gives Database Observability something more
+        # interesting than singleton statements to look at.
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+
+  flyway:
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    root: INFO
+
+# Planted-fault toggles. Each defaults to ON (true) so a bare `docker run` / compose-up demos the
+# full "bad telemetry" story; set the corresponding FAULT_* env var to false to see the fixed path.
+# Spring's relaxed binding maps FAULT_SLOW_SEARCH -> fault.slow-search, etc., so these YAML
+# defaults and the env vars documented in the README refer to the very same properties.
+fault:
+  slow-search: true
+  n-plus-one: true
+  checkout-errors: true
+  memory-leak: true
+  memory-leak-mb-per-min: 2
