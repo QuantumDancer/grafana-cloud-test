@@ -22,11 +22,13 @@ grafana_cloud_access_policy_token = "glc_eyJ..."
 # Slug of the pre-existing, long-lived stack (e.g. "myorg" for myorg.grafana.net).
 stack_slug = "myorg"
 
-# Region for Cloud Access Policy management — find the exact value under
-# Access Policies > Create Access Policy in the portal (e.g. "prod-eu-west-3"
-# for Frankfurt). Defaults to "prod-eu-west-3"; override if your account's
-# access-policy region differs.
-# grafana_cloud_region = "prod-eu-west-3"
+# Region for Cloud Access Policy management. Defaults to "prod-eu-west-2" —
+# where this account's stack and all its existing access policies live (check
+# under Access Policies in the portal; policies must be created in the same
+# region as the resources they grant access to). NOTE: the portal's own
+# "Create Access Policy" dialog defaults the region dropdown to "us" — create
+# the portal token's policy in prod-eu-west-2 as well.
+# grafana_cloud_region = "prod-eu-west-2"
 
 # Grafana Cloud login/email used as the acting user for the k6 App
 # installation (grafana_k6_installation.grafana_user).

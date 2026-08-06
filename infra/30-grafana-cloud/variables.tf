@@ -26,7 +26,10 @@ variable "grafana_cloud_region" {
     Check the exact value under Access Policies > Create in the portal.
   EOT
   type        = string
-  default     = "prod-eu-west-3"
+  # This account's stack and all its existing access policies live in
+  # prod-eu-west-2 (verified in the portal, 2026-08-06) — new policies must be
+  # created in the same region as the resources they grant access to.
+  default     = "prod-eu-west-2"
 }
 
 variable "grafana_user" {
