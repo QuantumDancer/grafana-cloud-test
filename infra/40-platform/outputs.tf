@@ -23,7 +23,8 @@ output "cnpg_app_secret_name" {
     Name of the CNPG-managed Secret holding the `shop` app database's connection credentials
     (username, password, dbname, host, port, uri, jdbc-uri keys), in the `shop` namespace.
   EOT
-  value       = "shop-db-app-credentials"
+  # CNPG's own naming for the auto-generated app secret: <cluster>-app.
+  value       = "shop-db-app"
 }
 
 output "cnpg_rw_service" {

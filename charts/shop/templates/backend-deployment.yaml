@@ -66,6 +66,20 @@ spec:
           resources:
             {{- toYaml .Values.backend.resources | nindent 12 }}
 
+          # The startup probe exists so the deliberately tight liveness probe
+          # below never fires during boot: Spring Boot + the OTel javaagent
+          # under this pod's small CPU limit take well over a minute to start
+          # (first live deploy: liveness SIGTERM'd the pod at ~70s, repeatedly,
+          # before the app ever came up). Liveness/readiness only begin once
+          # this succeeds, so their own tuning stays honest about the
+          # memory-leak fault's GC degradation.
+          startupProbe:
+            httpGet:
+              path: {{ .Values.backend.startupProbe.path }}
+              port: http
+            periodSeconds: {{ .Values.backend.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.backend.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.backend.startupProbe.failureThreshold }}
           # See values.yaml's livenessProbe/readinessProbe comments for why both
           # target /api/health specifically (not Actuator's DB-checking one) and
           # why liveness is tuned tight enough to actually trip on the memory-leak

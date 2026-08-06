@@ -23,7 +23,10 @@ backend:
     # instead of silently deploying nothing.
     repository: ghcr.io/OWNER-PLACEHOLDER/grafana-cloud-test/backend
     tag: latest
-    pullPolicy: IfNotPresent
+    # Always, not IfNotPresent: the deploy script defaults both tags to
+    # `latest`, and a node that already holds an older `latest` would
+    # otherwise silently keep serving it after CI pushes a new build.
+    pullPolicy: Always
 
   service:
     port: 8080
@@ -40,6 +43,18 @@ backend:
     limits:
       cpu: 500m
       memory: 512Mi
+
+  # Boot protection: Spring Boot plus the OTel javaagent under the 500m CPU
+  # limit above take well over a minute to start, far longer than the tight
+  # liveness probe below tolerates. Kubernetes holds liveness/readiness off
+  # until the startup probe succeeds, so this grants up to periodSeconds ×
+  # failureThreshold = 300s of boot time without loosening the liveness
+  # tuning that the memory-leak fault relies on.
+  startupProbe:
+    path: /api/health
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 30
 
   # /api/health (HealthController) deliberately does zero DB work — see its
   # doc comment in the backend source — specifically so a Postgres blip
@@ -99,7 +114,7 @@ backend:
   # SPRING_DATASOURCE_URL since Spring's relaxed binding expects a JDBC URL,
   # not the plain libpq `uri` key.
   database:
-    secretName: shop-db-app-credentials
+    secretName: shop-db-app
 
 frontend:
   enabled: true
@@ -108,7 +123,8 @@ frontend:
     # Same placeholder convention as backend.image.repository above.
     repository: ghcr.io/OWNER-PLACEHOLDER/grafana-cloud-test/frontend
     tag: latest
-    pullPolicy: IfNotPresent
+    # Same `latest`-tag rationale as backend.image.pullPolicy above.
+    pullPolicy: Always
 
   service:
     port: 8080

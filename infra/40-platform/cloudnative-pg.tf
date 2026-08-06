@@ -57,9 +57,10 @@ resource "kubectl_manifest" "shop_db" {
         initdb = {
           database = "shop"
           owner    = "shop"
-          secret = {
-            name = "shop-db-app-credentials"
-          }
+          # No explicit `secret`: naming one tells CNPG to USE a pre-existing secret
+          # (first live apply failed with CreateContainerConfigError on the initdb pod
+          # because none existed). Left unset, the operator generates `<cluster>-app`
+          # (shop-db-app) with username/password plus ready-made jdbc-uri/uri keys.
           postInitSQL = [
             "CREATE USER \"db-o11y\" WITH PASSWORD '${random_password.db_o11y.result}'",
             "GRANT pg_monitor TO \"db-o11y\"",

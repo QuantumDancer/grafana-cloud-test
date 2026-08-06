@@ -46,7 +46,11 @@ COPY --from=build /sourcemaps /
 FROM docker.io/nginxinc/nginx-unprivileged:1.27-alpine AS runtime
 
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+# --chown: the base image runs as UID 101, and the config-generation hook
+# below must create config.js *inside* this directory at container start — a
+# root-owned copy left it read-only for that user (first live deploy failed
+# with "can't create /usr/share/nginx/html/config.js: Permission denied").
+COPY --from=build --chown=101:101 /app/dist /usr/share/nginx/html
 
 # The base image's own entrypoint already runs every executable script under
 # /docker-entrypoint.d/ before starting nginx, in filename order — the `50-`
