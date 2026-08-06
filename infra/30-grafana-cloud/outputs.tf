@@ -21,9 +21,12 @@ output "prometheus_username" {
 }
 
 # Provider attribute is `logs_*`; underlying instance is Loki.
+# The stack attribute is the bare host URL; the push path must be appended
+# here because the k8s-monitoring chart's `loki` destination uses the URL
+# verbatim (first live run: Alloy POSTed to the host root and got 405).
 output "loki_url" {
-  description = "Loki push endpoint for the stack."
-  value       = data.grafana_cloud_stack.this.logs_url
+  description = "Loki push endpoint for the stack (full /loki/api/v1/push path)."
+  value       = "${data.grafana_cloud_stack.this.logs_url}/loki/api/v1/push"
 }
 
 output "loki_username" {
@@ -31,9 +34,12 @@ output "loki_username" {
   value       = data.grafana_cloud_stack.this.logs_user_id
 }
 
+# Same bare-host caveat as loki_url: the gateway serves OTLP under /otlp
+# (i.e. /otlp/v1/traces etc.) and the chart uses this URL verbatim (first
+# live run: 404 on /v1/* without the suffix).
 output "otlp_url" {
-  description = "OTLP endpoint for the stack (metrics+logs+traces via a single OTLP destination, an alternative to the split prometheus/loki/tempo endpoints above)."
-  value       = data.grafana_cloud_stack.this.otlp_url
+  description = "OTLP/HTTP endpoint for the stack (metrics+logs+traces via a single OTLP destination), including the /otlp base path."
+  value       = "${data.grafana_cloud_stack.this.otlp_url}/otlp"
 }
 
 # The OTLP gateway authenticates with the stack (instance) id as basic-auth username,

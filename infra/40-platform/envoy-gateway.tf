@@ -62,6 +62,18 @@ resource "kubectl_manifest" "external_gateway" {
     }
     spec = {
       gatewayClassName = "eg"
+      # Envoy Gateway copies these annotations onto the LoadBalancer Service it
+      # generates for this Gateway. Without the scheme annotation, EKS Auto
+      # Mode's built-in load balancer controller provisions an *internal* NLB
+      # (its default) — found live: shop.rottlr.de resolved to a private VPC
+      # IP and timed out from the internet. AWS NLB scheme is immutable, so
+      # the controller replaces the NLB on this change; external-dns follows
+      # the new hostname automatically.
+      infrastructure = {
+        annotations = {
+          "service.beta.kubernetes.io/aws-load-balancer-scheme" = "internet-facing"
+        }
+      }
       listeners = [
         {
           name     = "http"
