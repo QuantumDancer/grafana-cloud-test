@@ -36,6 +36,13 @@ output "otlp_url" {
   value       = data.grafana_cloud_stack.this.otlp_url
 }
 
+# The OTLP gateway authenticates with the stack (instance) id as basic-auth username,
+# unlike the per-signal endpoints which each have their own user id.
+output "otlp_username" {
+  description = "Basic-auth username for the OTLP endpoint (the stack id)."
+  value       = data.grafana_cloud_stack.this.id
+}
+
 output "tempo_url" {
   description = "Tempo (traces) endpoint for the stack. Per the provider docs, append /tempo when wiring this as a Grafana Tempo data source."
   value       = data.grafana_cloud_stack.this.traces_url
