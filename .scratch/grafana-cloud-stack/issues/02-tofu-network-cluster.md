@@ -13,3 +13,10 @@ components via `terraform_remote_state` (local backend paths).
 
 Done: `start.sh` brings up VPC+cluster from zero; `stop.sh` destroys cleanly; kubeconfig
 obtainable via `aws eks update-kubeconfig`.
+
+## Comments
+
+2026-08-06: Completed (commit `ddf3294`, main session). NAT decision: single managed NAT
+gateway instead of fck-nat — session-hours make the premium cents and it removes a
+hand-rolled component (rationale in `infra/10-network/main.tf`). `tofu validate` passes for
+both components; scripts shellcheck-clean. Live apply still untested (issue 10).

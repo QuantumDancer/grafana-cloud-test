@@ -15,3 +15,11 @@ Verify current versions (React, Vite, faro-react router-v7 support) before pinni
 
 Done: `pnpm test` + `pnpm build` pass; `docker build` succeeds; app usable against a local
 backend; Faro init verified (events visible in network tab against a dummy collector URL).
+
+## Comments
+
+2026-08-06: Completed (executor + main session verification; frontend + fixes commits).
+React 19 / Vite 8 / Router 7 / faro-react 2.9; 12/12 vitest, eslint clean; image builds
+with podman (50 MB) after three container fixes (pnpm-workspace.yaml in install COPY,
+qualified base images, COPY --chmod). Faro docs discrepancy found:
+`propagateTraceHeaderCorsUrls` lives under `instrumentationOptions`.

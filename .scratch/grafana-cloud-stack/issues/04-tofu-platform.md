@@ -20,3 +20,13 @@ idp-terraform-aws-infra. In-component ordering via depends_on:
 Done: fresh `start.sh` run yields Ready gateway with valid LE cert, DNS record for
 shop.rottlr.de, healthy CNPG cluster, Alloy pods shipping to Grafana Cloud
 (Kubernetes Monitoring shows the cluster).
+
+## Comments
+
+2026-08-06: Built and validated (executor + main session; 40-platform commit). Chart
+versions verified against live repos: cert-manager 1.21.1, Envoy Gateway 1.8.3 (bundles
+Gateway API CRDs), external-dns 1.21.1, CNPG 0.29.0, k8s-monitoring 4.3.2. Auto Mode
+StorageClass created explicitly. Output contract with 30 reconciled
+(`prometheus_remote_write_url`, new `otlp_username`). Live-apply caveats in SESSION.md
+(`tofu plan`/helm render untested, Alloy service DNS derived, sslmode assumption). The
+done-criteria above remain unproven until issue 10's first session.

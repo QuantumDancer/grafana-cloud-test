@@ -16,3 +16,12 @@ Outputs (sensitive where applicable) consumed by 40-platform and scripts/deploy-
 
 Done: `tofu apply` creates all of it against the real stack; `tofu destroy` removes it;
 research doc `grafana-terraform-provider-k6-synthetics.md` caveats respected.
+
+## Comments
+
+2026-08-06: Built and validated (commits `bc862b4` + `otlp_username` in the 40-platform
+commit; executor + main session). Schema realities vs. plan: k6 installation wants the
+portal token + a stack service-account token (no publisher token); `settings` and
+`extra_log_attributes` on the Faro app are schema-required (passed `{}`). NOT yet applied
+against the real stack — two pre-apply verifications logged in SESSION.md
+(`grafana_cloud_region` value, frontend-o11y access-policy realm).

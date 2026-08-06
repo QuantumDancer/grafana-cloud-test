@@ -17,3 +17,11 @@ distro + its Spring Boot compat) against upstream docs before pinning.
 
 Done: `mvn verify` passes; `docker build` succeeds; app runs against local Postgres
 (docker compose file for local dev acceptable) and serves seeded data.
+
+## Comments
+
+2026-08-06: Completed (executor + main session verification; backend commit). Java 25,
+Spring Boot 4.1, PG 18, Grafana OTel distro 2.30. 16/16 unit tests + Testcontainers
+integration tests green against the podman socket; image builds with podman (453 MB).
+Extra: `SELECT ... FOR UPDATE` on checkout stock rows (oversell guard + lock-contention
+demo for DB O11y).
