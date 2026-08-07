@@ -46,7 +46,16 @@ const CUSTOMER_ID_MAX = 10000;
 //     traffic profile doesn't look like 100% adversarial probing.
 const SLOW_SEARCH_TERMS = ['a', 'e', 'pro', 'the', 'lens'];
 const PRODUCT_SEARCH_TERMS = ['telescope', 'binoculars', 'magnifying', '8x42', 'refractor', 'zoom'];
-const CATEGORIES = ['', 'Telescopes', 'Binoculars', 'Magnifying Glasses'];
+// The backend's ProductCategory enum names, NOT the shop's display labels.
+// `ProductService.normalizeCategory` parses this parameter case-insensitively
+// into the enum and falls back to "no filter at all" for anything that doesn't
+// parse — so the display labels this list used to hold ('Telescopes', …) made
+// every category browse silently return the *unfiltered* catalog, and the
+// indexed `WHERE category = ?` path was never exercised at all. Verified
+// against the live backend on 2026-08-07: `category=Telescopes` reported
+// totalElements 1000, `category=TELESCOPE` reported 333. Same root cause as
+// the frontend contract mismatch in issue 15.
+const CATEGORIES = ['', 'TELESCOPE', 'BINOCULARS', 'MAGNIFIER'];
 
 // Custom metrics kept separate from the default http_req_failed/duration so
 // the checkout flow's *expected* ~2% planted 500 rate (FAULT_CHECKOUT_ERRORS)

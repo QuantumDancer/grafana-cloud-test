@@ -106,6 +106,39 @@ brief:
   (see `CheckoutOutcome` in `src/types/domain.ts` and `CheckoutPage.tsx`)
 - `GET /api/customers/{id}/orders`
 
+### Wire format vs. view models
+
+The backend's response schemas are **not** the shapes the components render,
+and the two are kept deliberately apart in three files:
+
+| File | Owns |
+|---|---|
+| `src/types/wire.ts` | What the Spring backend actually sends — transcribed from live responses and cross-checked against its DTO records. Imported only by `mapping.ts` and the mocks. |
+| `src/types/domain.ts` | What the UI wants — dollars, display category labels, 1-based pages, `author`/`comment`. |
+| `src/api/mapping.ts` | The translation, in one auditable place. |
+
+The differences it absorbs: integer `priceCents` → dollars; `TELESCOPE` →
+`Telescopes` (and back, for the filter parameter); Spring's `Page` envelope
+(`content`, 0-based `number`, `totalElements`) → `items`/1-based
+`page`/`totalItems`; `authorName`/`text` → `author`/`comment`;
+`totalCents`/`createdAt` → `total`/`placedAt`; and the `emoji`, which the
+backend has no concept of and which is derived from the category client-side.
+
+This exists because it once didn't. The frontend was built against an invented
+wire shape, the MSW mocks agreed with the invention, every test passed, and the
+first real browser-to-backend request crashed the catalog on
+`a.items is undefined` (`.scratch/grafana-cloud-stack/issues/15-*`). So the
+mocks now serve the **backend's** shape — including the full `PageImpl`
+envelope and the `{"error": …}` bodies `ApiExceptionHandler` returns — and
+`src/api/client.test.ts` asserts the mapping against payloads captured verbatim
+from the live backend. If the backend's format changes, re-capture those
+fixtures; that file is the contract.
+
+One deliberate divergence: the mock pages at 6 products where the real backend
+pages at 20, so the 15 fixture products still span three pages and the
+pagination controls stay exercisable. Page *size* is backend policy, not part
+of the response shape the frontend has to agree with.
+
 **Dev-server proxy:** `vite.config.ts` proxies `/api` to
 `VITE_BACKEND_URL` (default `http://localhost:8080`) when running `pnpm dev`
 against a real backend.
@@ -190,6 +223,11 @@ be reviewed/built for real before relying on them.
   `react-router` directly, since it's what still ships `createBrowserRouter`
   for a plain (non-framework-mode) Vite app in the v7 line — see the version
   table above.
+- **`magnification` / `apertureMm` are received but not rendered**: both are on
+  the wire and modelled in `src/types/wire.ts`, but the mapping layer doesn't
+  carry them into the view model and no component shows them. The seeded
+  descriptions mention both in prose, so nothing is hidden from a shopper — a
+  spec table on the detail page would be a cheap addition if wanted.
 - Reasonable assumptions made without stopping to ask (per default when run
   unattended): page size of 6 products in the mock catalog endpoint; a fixed
   3-category set (Telescopes/Binoculars/Magnifying Glasses) with 15 seed

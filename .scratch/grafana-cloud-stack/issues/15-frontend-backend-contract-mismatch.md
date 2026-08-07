@@ -1,6 +1,6 @@
 # Frontend/backend API contract mismatch — catalog crashes on load
 
-Status: ready-for-agent
+Status: resolved
 
 `https://shop.rottlr.de/` throws on first render: `can't access property "length",
 a.items is undefined` (react-router's default error boundary, "Unexpected Application
@@ -59,3 +59,51 @@ Frontend O11y; checked via gcx → Loki `{app_id="6986", kind="exception"}`):
   `faro-collector-prod-eu-west-2.grafana.net/collect/…` are evidently blocked
   client-side (Firefox Enhanced Tracking Protection / ad-blocker), worth confirming
   in devtools.
+
+2026-08-07 (user): Firefox is almost certainly blocking the collector via tracking
+protection; will confirm in devtools later. Working in Chrome for now — so the
+missing-Firefox-telemetry thread is parked, not a blocker for this issue.
+
+## Resolution (2026-08-07)
+
+Fixed frontend-side, as recommended. The wire format and the view models are now
+two separate things with one translation between them:
+
+- `src/types/wire.ts` (new) — the backend's actual shapes, transcribed from live
+  responses and cross-checked against its DTO records.
+- `src/types/domain.ts` — rewritten as view models only.
+- `src/api/mapping.ts` (new) — the whole translation: `priceCents`→dollars,
+  `TELESCOPE`↔`Telescopes` (both directions, one table), Spring `Page`→1-based
+  `ProductPage`, `authorName`/`text`→`author`/`comment`,
+  `totalCents`/`createdAt`→`total`/`placedAt`, emoji derived from category.
+- `src/api/client.ts` — parses each response as its wire type and returns view
+  models; sends the 0-based `page` and the enum category name.
+- `src/mocks/{fixtures,handlers}.ts` — rewritten to serve the backend's shape,
+  including the full `PageImpl` envelope and the `{"error": …}` bodies
+  `ApiExceptionHandler` returns, so tests can no longer pass against a contract
+  only the frontend believes in.
+
+Two divergences the mapping layer handles that weren't in the inventory above:
+
+- **Order status.** The frontend's type said `'CONFIRMED'`; the backend's
+  `OrderStatus` enum has exactly one value and it's `COMPLETED`. Widened to
+  `string` — nothing renders it, and a future status shouldn't be a type error at
+  the wire boundary.
+- **Unrecognized category = no filter.** `ProductService.normalizeCategory` turns
+  a category it can't parse into `null` rather than an error, so the old code's
+  `category=Telescopes` returned the *unfiltered* catalog and looked like a broken
+  filter rather than a bad request. `toWireCategory` now returns `undefined` for
+  anything not in the enum and the client omits the parameter entirely, and the
+  MSW handler reproduces the same silent-ignore so a test can catch a regression.
+
+Verification: 25 unit tests pass (`src/api/client.test.ts` asserts the mapping
+against payloads captured verbatim from the live backend), `tsc -b` and `eslint`
+clean. A throwaway live-contract test (not committed) ran the mappers over the
+real backend and mapped all **1000 products across 50 pages** with no `NaN` or
+`undefined`, all three categories and emojis present, plus live reviews and 13
+live orders for customer 1.
+
+Note for issue 10's "deobfuscated stack trace in Frontend O11y" check: the silver
+lining above is now spent — this crash will stop appearing once the fixed bundle
+deploys. The two frontend-owned planted faults (`/lens-care`, `/slow-page`) remain
+as intentional error sources for that check.

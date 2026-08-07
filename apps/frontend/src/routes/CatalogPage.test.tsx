@@ -44,6 +44,19 @@ describe('CatalogPage search', () => {
     expect(await screen.findByText('No products match your search.')).toBeInTheDocument();
   });
 
+  // The crash this suite failed to catch before the mocks spoke the backend's
+  // wire format: the catalog read `items`/`page` off a Spring `Page` that
+  // sends `content`/`number`, and `undefined.length` took the whole app down.
+  // Rendering a priced card and the 1-based pager exercises both halves of
+  // that mapping — the backend's own page index here is 0.
+  it('renders backend-shaped rows with a 1-based page number', async () => {
+    renderCatalog();
+
+    expect(await screen.findByText('Voyager 70mm Refractor')).toBeInTheDocument();
+    expect(screen.getByText('$189.99')).toBeInTheDocument();
+    expect(screen.getByText('Page 1 of 3')).toBeInTheDocument();
+  });
+
   it('filters by category', async () => {
     const user = userEvent.setup();
     renderCatalog();

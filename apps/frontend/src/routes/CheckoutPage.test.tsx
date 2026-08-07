@@ -70,8 +70,20 @@ describe('CheckoutPage error surfacing', () => {
   it('confirms the order and clears the cart on success', async () => {
     server.use(
       http.post('/api/orders', () =>
+        // The backend's OrderResponse shape — integer cents, `createdAt`, and
+        // the `COMPLETED` status enum. Asserting the rendered total below is
+        // what makes this a real check: against the frontend's old invented
+        // shape the mapping produces a total of NaN, and a confirmation
+        // reading "Total $NaN" would otherwise still satisfy the id match.
         HttpResponse.json(
-          { id: 4242, customerId: 1, items: [{ productId: 1, quantity: 1 }], status: 'CONFIRMED', placedAt: new Date().toISOString(), total: 189.99 },
+          {
+            id: 4242,
+            customerId: 1,
+            status: 'COMPLETED',
+            totalCents: 18999,
+            createdAt: '2026-08-07T09:15:00.123456Z',
+            items: [{ productId: 1, productName: 'Voyager 70mm Refractor', quantity: 1, unitPriceCents: 18999 }],
+          },
           { status: 201 },
         ),
       ),
@@ -81,7 +93,7 @@ describe('CheckoutPage error surfacing', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Place order' }));
 
-    expect(await screen.findByText(/Order #4242 confirmed/)).toBeInTheDocument();
+    expect(await screen.findByText(/Order #4242 confirmed! Total \$189\.99\./)).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: 'Place order' })).not.toBeInTheDocument();
     });

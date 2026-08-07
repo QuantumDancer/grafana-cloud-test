@@ -11,7 +11,7 @@ occasionally as a manual `k6 cloud` run against `https://shop.rottlr.de`
 
 | Step | Endpoint | Always/conditional | Purpose |
 |---|---|---|---|
-| Browse/search | `GET /api/products?search=&category=&page=` | always | Catalog browsing. ~60% of iterations add a search term; of those, ~40% use a deliberately common/short substring (`a`, `e`, `pro`, `the`, `lens`) that maximizes rows matched by `FAULT_SLOW_SEARCH`'s unanchored `ILIKE '%term%'`, the rest use realistic product terms. |
+| Browse/search | `GET /api/products?search=&category=&page=` | always | Catalog browsing. ~60% of iterations add a search term; of those, ~40% use a deliberately common/short substring (`a`, `e`, `pro`, `the`, `lens`) that maximizes rows matched by `FAULT_SLOW_SEARCH`'s unanchored `ILIKE '%term%'`, the rest use realistic product terms. The `category` value must be a **`ProductCategory` enum name** (`TELESCOPE`/`BINOCULARS`/`MAGNIFIER`), not a display label — the backend silently drops a filter it can't parse, so a wrong value browses the whole catalog instead of erroring. |
 | Product detail | `GET /api/products/{id}`, `GET /api/products/{id}/reviews` | always | Random product in `[1, 1000]`. |
 | Checkout | `POST /api/orders` | ~30% of iterations | Random customer in `[1, 10000]`, 1-3 units of the last-viewed product. Tolerates `201` (placed), `409` (out of stock — a real possible outcome, not a bug), and `500` (`FAULT_CHECKOUT_ERRORS`'s simulated ~2% payment failure) as all "expected"; only genuinely unexpected statuses count against the error-rate metric. |
 | Order history | `GET /api/customers/{id}/orders` | ~20% of iterations | Random customer in `[1, 10000]`. This is the endpoint `FAULT_N_PLUS_ONE` lives on. |
