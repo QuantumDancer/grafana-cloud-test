@@ -37,6 +37,12 @@ scripts/deploy-shop.sh  # helm-installs the Shop + load generation
 scripts/stop.sh         # ordered destroys, leaves nothing billing
 ```
 
+`stop.sh` refuses to start unless your AWS credentials are valid **and** have enough life
+left to finish. This matters because the destroy runs in reverse, so the cheap layers go
+first and the cluster and VPC go last: a session that expires partway through leaves
+exactly the expensive things running. If it blocks, run the `aws sso login` command it
+prints, or override the estimate with `TEARDOWN_EXPECTED_MINUTES=<n> scripts/stop.sh`.
+
 Secrets (AWS profile, Grafana Cloud stack slug + tokens, Cloudflare API token) live in
 untracked `*.auto.tfvars` files — see `infra/*/variables.tf` for what each component needs.
 
