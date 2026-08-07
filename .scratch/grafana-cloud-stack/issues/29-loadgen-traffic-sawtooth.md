@@ -186,6 +186,34 @@ PID   PPID  COMMAND
 
 Deployed as release revision 13.
 
+Confirmed across a real run boundary at 15:27 UTC — the decisive test, since everything
+before it only showed the loop had *started* correctly:
+
+- Pod age 59m with `restarts=0` and `lastState={}` (the container has never restarted),
+  while k6 reported `03m58.0s/55m0s` — a second run, in the original container. 55m + ~4m
+  matches the pod age exactly.
+- Run 1 exited 0. This is proved by the loop itself rather than assumed: `|| exit $?`
+  would have killed the container on any non-zero code, so run 2 executing with
+  `restartCount` still 0 is only possible if run 1 returned 0. Its summary agrees — both
+  `http_req_failed` thresholds ✓ (0.56% and 0.25% against `rate<0.05`), 13016 requests,
+  3722 iterations.
+- The handover is invisible in the traffic. Backend request rate across it: 15:26 = 4.33,
+  15:27 = 4.23, 15:28 = 4.25, with min 4.12 / max 4.45 over the surrounding 19 minutes.
+
+Run 1's 49 failed checks out of 9294 (99.47% succeeded) are not from this change — they
+line up with the backend's `FAULT_MEMORY_LEAK` liveness-probe restart at 14:31-14:34,
+which took the API fully down for about two minutes (see below).
+
+### Related, not fixed here
+
+The planted `FAULT_MEMORY_LEAK` restart is now the *only* thing still punching holes in the
+traffic, and its holes are deeper than the sawtooth this issue removed: rate went to a
+literal 0.00/s for a minute (14:33), versus the sawtooth's ~75% trough. Because the backend
+runs `replicas: 1`, every leak cycle is a complete API outage rather than a degradation —
+already recorded as issue 16, which proposes two replicas as the structural fix. Worth
+settling before a long baseline run, since it damages exactly the telemetry continuity this
+issue set out to protect.
+
 ## Comments
 
 Testability gap noticed here: the scenario `duration` is hardcoded `'55m'`, so verifying
