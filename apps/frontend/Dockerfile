@@ -24,6 +24,11 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY . .
+# The commit sha, injected into the bundle as Faro's `app.version` (see
+# src/faro.ts) so runtime stack traces can be matched to the source maps CI
+# uploads under the same sha. ARG doubles as an env var for the RUN below.
+# Defaults empty for local builds, where no maps are uploaded anyway.
+ARG VITE_APP_VERSION=""
 RUN pnpm build
 
 # vite.config.ts's build.sourcemap:true put a .map next to every emitted

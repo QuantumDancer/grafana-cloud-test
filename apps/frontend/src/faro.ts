@@ -27,8 +27,16 @@ export function initFaro(config: RuntimeConfig): void {
     url: config.faroCollectorUrl,
     apiKey: config.faroAppKey || undefined,
     app: {
+      // version identifies the *build artifact*, not the environment, so it
+      // comes from the Vite build (CI injects the commit sha via the
+      // VITE_APP_VERSION build arg) rather than from runtime config. It must
+      // equal the `--bundle-id` CI passes to `faro-cli upload` — that pair is
+      // how Faro matches minified runtime stack traces to the uploaded source
+      // maps. Local builds have no version; `undefined` omits the field
+      // instead of reporting an empty string.
       name: 'spyglass-frontend',
       environment: config.appEnvironment,
+      version: import.meta.env.VITE_APP_VERSION || undefined,
     },
     instrumentations: [
       ...getWebInstrumentations(),

@@ -61,7 +61,12 @@ jobs:
       # its *own* internal build stage, so this plain host-side build is the
       # simplest source of maps for the upload step below without needing a
       # `docker build --target sourcemaps --output ...` export just for CI.
+      # VITE_APP_VERSION must match the image build's build-arg below: these
+      # maps are uploaded for the bundle the *image* serves, so both builds
+      # have to bake in the identical sha.
       - run: pnpm build
+        env:
+          VITE_APP_VERSION: ${{ github.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -92,6 +97,8 @@ jobs:
           context: apps/frontend
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+          build-args: |
+            VITE_APP_VERSION=${{ github.sha }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -123,10 +130,9 @@ jobs:
       # CLI (not the Rollup/Vite bundler plugin) so no devDependency needs
       # adding to the app just for CI; `pnpm dlx` fetches it on demand, same
       # mechanism as `npx` but consistent with the rest of this pnpm project.
-      # bundle-id is pinned to the commit sha to line up with the image tag
-      # above — see SESSION.md for the caveat that the frontend doesn't yet
-      # set a matching `app.version` in its Faro init, which the docs imply
-      # runtime stack traces need for automatic map matching.
+      # bundle-id is pinned to the commit sha, which is also what the runtime
+      # reports as Faro `app.version` (VITE_APP_VERSION above) — that equality
+      # is how Faro pairs minified runtime stack traces with these maps.
       - name: Upload source maps to Grafana Faro
         if: steps.faro.outputs.configured == 'true'
         env:
