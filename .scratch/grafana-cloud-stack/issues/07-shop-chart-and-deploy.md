@@ -1,6 +1,6 @@
 # Shop helm chart + deploy script
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 05, 06
 
 `charts/shop/`: one chart, per-component enable flags — frontend, backend, loadgen,
@@ -22,3 +22,7 @@ clean, template renders all 9 resources with correct enable-flag trimming, shell
 names cross-checked against 40-platform (`shop-db-app-credentials`, Alloy OTLP HTTP :4318,
 gateway/external). `deploy-shop.sh` requires explicit `--backend-repo`/`--frontend-repo`.
 Live done-criteria await issue 10.
+
+2026-08-07 (triage): status flipped `ready-for-agent` → `resolved`; the build landed on
+2026-08-06 and the label was simply never updated. The live done-criteria noted above
+remain with issue 10, which is where they were always going to be proven.

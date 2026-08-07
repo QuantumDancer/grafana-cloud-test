@@ -1,6 +1,6 @@
 # Shop backend (Spring Boot)
 
-Status: ready-for-agent
+Status: resolved
 
 `apps/backend/`: latest stable Java LTS + Spring Boot + Maven. REST API under `/api`:
 products (list/search/detail), customers (minimal), orders (create=checkout, history per

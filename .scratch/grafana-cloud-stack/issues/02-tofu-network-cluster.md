@@ -1,6 +1,6 @@
 # Tofu components: 10-network + 20-cluster
 
-Status: ready-for-agent
+Status: resolved
 
 `infra/10-network`: VPC via terraform-aws-modules/vpc, 2 AZs, tagged for the cluster.
 Decide fck-nat vs no-NAT after checking EKS Auto Mode subnet requirements (record outcome here).
@@ -20,3 +20,7 @@ obtainable via `aws eks update-kubeconfig`.
 gateway instead of fck-nat — session-hours make the premium cents and it removes a
 hand-rolled component (rationale in `infra/10-network/main.tf`). `tofu validate` passes for
 both components; scripts shellcheck-clean. Live apply still untested (issue 10).
+
+2026-08-07 (triage): status flipped `ready-for-agent` → `resolved`; the build landed on
+2026-08-06 and the label was simply never updated. The live done-criteria noted above
+remain with issue 10, which is where they were always going to be proven.

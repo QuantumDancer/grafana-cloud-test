@@ -1,6 +1,6 @@
 # CI workflows
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 05, 06
 
 `.github/workflows/`: per-app workflows, path-filtered on push to main + PRs. Steps: unit

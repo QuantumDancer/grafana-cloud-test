@@ -1,0 +1,32 @@
+# MSW handlers diverge from the real backend in two places
+
+Status: ready-for-agent
+
+The mock the frontend tests against (`apps/frontend/src/mocks/handlers.ts`) disagrees with
+the backend on two responses. Neither has a user-visible consequence today, but this is
+precisely the class of mock/backend divergence that let issue 15 ship a catalog that
+crashed on every load while the whole test suite stayed green — so the mock's fidelity is
+the thing actually worth protecting here.
+
+1. **Unknown customer returns `200 []` instead of `404`.**
+   `handlers.ts:163-165` filters `ORDERS` unconditionally, so any customer id yields an
+   empty array. The backend 404s for a customer that doesn't exist. Real impact is
+   near-zero — checkout only ever picks ids in 1–10000, all of which are seeded — but a
+   test asserting "unknown customer shows an error" would pass against a mock that never
+   produces the error.
+
+2. **`totalPages` is 1 for an empty result where the backend sends 0.**
+   `handlers.ts:52` does `Math.max(1, Math.ceil(totalElements / PAGE_SIZE))`. No UI
+   consequence: the pager gates on `> 1`.
+
+Fix both in `handlers.ts`; the customer one needs a "does this id exist" check against
+the fixtures rather than an unconditional filter.
+
+Done: mock 404s for an unseeded customer id, `totalPages` is 0 on an empty page, existing
+vitest suite still green.
+
+## Comments
+
+2026-08-07: Filed from SESSION.md during triage. Both found by the fresh-context verifier
+that returned CONFIRMED on issue 15 — deferred at the time because changing the reviewed
+bytes after the verdict would have invalidated the coverage that earned it.

@@ -1,6 +1,6 @@
 # Tofu component: 40-platform
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 02, 03
 
 helm/kubernetes providers with exec auth (`aws eks get-token`), pattern from
@@ -30,3 +30,7 @@ StorageClass created explicitly. Output contract with 30 reconciled
 (`prometheus_remote_write_url`, new `otlp_username`). Live-apply caveats in SESSION.md
 (`tofu plan`/helm render untested, Alloy service DNS derived, sslmode assumption). The
 done-criteria above remain unproven until issue 10's first session.
+
+2026-08-07 (triage): status flipped `ready-for-agent` → `resolved`; the build landed on
+2026-08-06 and the label was simply never updated. The live done-criteria noted above
+remain with issue 10, which is where they were always going to be proven.

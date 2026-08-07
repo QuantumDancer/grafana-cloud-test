@@ -1,6 +1,6 @@
 # Repo scaffolding
 
-Status: ready-for-agent
+Status: resolved
 
 Create the confirmed layout: `infra/`, `apps/backend/`, `apps/frontend/`, `charts/shop/`,
 `load/`, `scripts/`, `.github/workflows/` (empty dirs via .gitkeep where needed), root

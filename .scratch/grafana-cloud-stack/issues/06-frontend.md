@@ -1,6 +1,6 @@
 # Shop frontend (React)
 
-Status: ready-for-agent
+Status: resolved
 
 `apps/frontend/`: TypeScript + React + Vite + React Router v7. Pages: product catalog with
 search, product detail (+reviews), cart, checkout, order history. Display name "Spyglass";

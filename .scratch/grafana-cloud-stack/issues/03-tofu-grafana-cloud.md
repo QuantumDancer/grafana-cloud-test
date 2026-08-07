@@ -1,6 +1,6 @@
 # Tofu component: 30-grafana-cloud
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 02
 
 Grafana provider (≥4.32, current 4.4x) against the existing free-tier stack (slug/region via

@@ -1,6 +1,6 @@
 # Load generation
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 05, 06
 
 `load/`: k6 HTTP scenario (browse, search — including slow-search terms, checkout with the
@@ -22,3 +22,7 @@ building); 15s/2-VU run passed all checks/thresholds. Browser script `k6 inspect
 only — needs a live smoke test (no Chromium here); noted in load/README.md. The richer
 script auto-flows into 30-grafana-cloud's `grafana_k6_load_test` on next apply. In-cluster
 continuous behavior awaits issue 10.
+
+2026-08-07 (triage): status flipped `ready-for-agent` → `resolved`; the build landed on
+2026-08-06 and the label was simply never updated. The live done-criteria noted above
+remain with issue 10, which is where they were always going to be proven.
