@@ -82,6 +82,15 @@ resource "helm_release" "k8s_monitoring" {
         collector = "alloy-metrics"
       }
 
+      # Scrapes the OpenCost deployed below and keeps its ~25-metric allow-list, which is what
+      # backs the Kubernetes Monitoring app's Cost tab. Note this is the *scrape* half only —
+      # `telemetryServices.opencost` is the half that deploys the workload, and the two blocks
+      # confusingly both have an `opencost` key underneath them.
+      costMetrics = {
+        enabled   = true
+        collector = "alloy-metrics"
+      }
+
       # Chart v4 never deploys telemetry services implicitly ("no silent deployments"):
       # clusterMetrics validates that kube-state-metrics/node-exporter exist, and fails
       # the install unless they're either deployed here or label-matched to existing ones.
@@ -91,6 +100,42 @@ resource "helm_release" "k8s_monitoring" {
         }
         "node-exporter" = {
           deploy = true
+        }
+
+        # OpenCost derives per-workload cost by *querying* metrics back out of Grafana Cloud
+        # rather than reading them from the cluster, so it needs the read scope 30-grafana-cloud
+        # now grants (see destinations.tf there for why the push token was widened rather than a
+        # second token minted). On EKS it needs no AWS billing integration: it reads
+        # node.spec.providerID, detects AWS, and pulls public on-demand pricing unaided — which
+        # means costs are list prices even where the nodes are actually spot.
+        opencost = {
+          deploy = true
+          # Ties OpenCost to the destination above, which makes the chart wire the query URL's
+          # credentials from that destination's own generated Secret. The alternative
+          # ("custom") would mean hand-rolling a Secret here.
+          metricsSource = "grafanaCloudPrometheus"
+
+          # The nesting is real, not a typo: `telemetryServices` aliases the telemetry-services
+          # subchart, which declares upstream's `opencost` chart as a dependency, so upstream's
+          # own values sit one level deeper.
+          opencost = {
+            exporter = {
+              # The chart validates this equals cluster.name. It also sets
+              # CURRENT_CLUSTER_ID_FILTER_ENABLED, so every OpenCost query is filtered by
+              # cluster="<this>" — a mismatch here makes OpenCost silently see an empty cluster.
+              defaultClusterId = local.cluster_name
+            }
+            prometheus = {
+              # Credentials are not inline here; the chart requires naming the Secret it
+              # generates for the grafanaCloudPrometheus destination, whose name it derives as
+              # <lowercased destination key>-<release name>. It validates the value, so a wrong
+              # name fails the install with the expected one rather than failing at runtime.
+              existingSecretName = "grafanacloudprometheus-k8s-monitoring"
+              external = {
+                url = local.gc.prometheus_query_url
+              }
+            }
+          }
         }
       }
 

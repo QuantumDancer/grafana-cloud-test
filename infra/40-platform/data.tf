@@ -20,6 +20,7 @@ data "terraform_remote_state" "cluster" {
 # this component consumes, so the two components can be aligned):
 #   stack_id                                         - Grafana Cloud stack identifier
 #   prometheus_remote_write_url, prometheus_username - remote_write URL + basic-auth username
+#   prometheus_query_url                             - query URL, read back by OpenCost
 #   loki_url, loki_username                          - push URL + basic-auth username
 #   otlp_url, otlp_username                          - OTLP gateway URL + basic-auth username
 #   destinations_token (sensitive)                   - shared basic-auth password for all three

@@ -20,6 +20,18 @@ output "prometheus_remote_write_url" {
 # yamlencode() in scientific notation ("2.244577e+06") — which Grafana Cloud
 # rejected live with 401 invalid authentication credentials. Strings encode
 # verbatim.
+# The *query* endpoint, as distinct from the remote_write one above. Grafana
+# Cloud documents this as the remote_write URL with `/api/prom/push` replaced
+# by `/prometheus`, but the provider already exposes the equivalent `/api/prom`
+# form as a first-class attribute, so no string surgery is needed. `/api/prom`
+# is preferred over `/prometheus` (both route) because it is the form the
+# k8s-monitoring chart derives and prints in its own validation errors.
+# Consumed by 40-platform to point OpenCost at the metrics it reads back.
+output "prometheus_query_url" {
+  description = "Prometheus (Mimir) query endpoint for the stack — requires metrics:read."
+  value       = data.grafana_cloud_stack.this.prometheus_remote_endpoint
+}
+
 output "prometheus_username" {
   description = "Basic-auth username (instance/user id) for the Prometheus remote_write endpoint."
   value       = tostring(data.grafana_cloud_stack.this.prometheus_user_id)
@@ -65,7 +77,7 @@ output "tempo_username" {
 }
 
 output "destinations_token" {
-  description = "Access-policy token (metrics:write, logs:write, traces:write) for the k8s-monitoring chart's destinations."
+  description = "Access-policy token (metrics:write, metrics:read, logs:write, traces:write) for the k8s-monitoring chart's destinations."
   value       = grafana_cloud_access_policy_token.destinations.token
   sensitive   = true
 }
