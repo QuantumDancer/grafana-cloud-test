@@ -102,11 +102,11 @@ export function toProductPage(page: WirePage<WireProductSummary>): ProductPage {
   };
 }
 
-/** UI page (1-based) → backend page (0-based), floored at 0 so a malformed
- *  `?page=` in the URL can't turn into a negative index the backend would
- *  reject. */
+/** UI page (1-based) → backend page (0-based), floored at 0 and truncated to
+ *  an integer so a malformed `?page=` in the URL — negative, or fractional
+ *  like `2.7` — can't turn into a request the backend would 400 on. */
 export function toWirePageNumber(page: number | undefined): number {
-  return Math.max(0, (page ?? 1) - 1);
+  return Math.max(0, Math.trunc((page ?? 1) - 1));
 }
 
 // ------------------------------------------------------------------ reviews
