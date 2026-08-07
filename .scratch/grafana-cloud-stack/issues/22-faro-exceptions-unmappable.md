@@ -1,0 +1,69 @@
+# Frontend O11y stack traces are neither real exceptions nor deobfuscatable
+
+Status: ready-for-agent
+
+Triggering the planted `/lens-care` fault produces a fully minified stack in Frontend
+Observability. There are **two independent causes**, and neither fix alone delivers a
+readable trace — fix the bundle id and you deobfuscate the wrong frames; fix the error
+path and you get a genuine stack that still cannot be mapped.
+
+## Cause A — the SDK never reports a bundle id
+
+Issue 11 verified the upload end of the chain and the `app.version` end, but nothing ever
+exercised the join between them. All three identities do agree:
+
+| value | source |
+|---|---|
+| served asset `index-BDhlgofM.js` | `curl https://shop.rottlr.de/` |
+| `app.version = c333995e411d…` | baked into the served bundle |
+| uploaded map bundle-id `c333995e411d…` | `gcx frontend apps list-sourcemaps spyglass-6986` |
+
+…and it makes no difference, because **`app.bundleId` is never set**. Faro 2.9.0 builds
+its metadata as `app: {bundleId: be(t), …}` where `be()` reads only
+`globalThis['__faroBundleId_<appName>']`. That string occurs exactly once in the served
+bundle — the reader, never an assignment. Confirmed on the wire: 8 `kind=exception`
+signals in Loki for this fault, and the payload key set contains no bundle-id field at
+all. `app.version` is a separate field and is not the lookup key.
+
+Why it is missing: `.github/workflows/frontend.yml:140-156` runs `faro-cli upload` but
+never `faro-cli inject-bundle-id`, and no bundler plugin is configured.
+
+**Fix — in `apps/frontend/src/faro.ts`, not in CI.** Before `initializeFaro()`, set the
+global the SDK actually reads, from the build-time value already available:
+
+    (globalThis as Record<string, unknown>)['__faroBundleId_spyglass-frontend'] =
+      import.meta.env.VITE_APP_VERSION;
+
+guarded on the value being non-empty. CI-side `faro-cli inject-bundle-id` would patch
+only CI's host-side `dist/`, **not** the separately-built image that actually serves the
+bundle — the same class of trap issue 15 hit with the `latest` tag. A cleaner long-term
+option is `@grafana/faro-rollup-plugin` in `vite.config.ts`, which injects and uploads
+from one place for both builds and would let the CLI step in `frontend.yml` go away.
+
+## Cause B — the error arrives as a console string, not an exception
+
+Every one of the 8 signals has a `value` beginning `console.error:` —
+`faro.api.pushError` is never reached. `apps/frontend/src/main.tsx:35` mounts
+`FaroErrorBoundary` *outside* `RouterProvider`, and `apps/frontend/src/router.tsx:13-29`
+defines no `errorElement`, so React Router's built-in boundary always catches first and
+Faro only sees what it logs to the console. That is why the top frames are Faro's own
+`initialize/this.subscription<`, `notify/<` and `bn/</console[e]` internals: the `Error`
+object is manufactured at Faro's console hook, not at the throw site
+(`LensCareGuidePage.tsx:20`). It also explains the triplicated reports.
+
+**Fix — add an `errorElement` on the root route in `apps/frontend/src/router.tsx`**: a
+small `RouteErrorBoundary` using `useRouteError()` that calls
+`faro.api.pushError(error instanceof Error ? error : new Error(String(error)))` once in
+an effect, then renders the fallback UI currently living in `main.tsx`.
+
+This supersedes the SESSION.md entry about React Router out-competing `FaroErrorBoundary`.
+
+Done: triggering `/lens-care` produces exactly one `kind=exception` signal whose stack
+resolves to `LensCareGuidePage.tsx`.
+
+## Comments
+
+2026-08-07: Filed from the issue-10 validation session. Note one inference that was not
+provable from docs: that Grafana does not silently fall back to `app.version` when
+`bundleId` is absent. Observed behaviour is consistent with no fallback, and both fixes
+are correct either way, but it is not confirmed.

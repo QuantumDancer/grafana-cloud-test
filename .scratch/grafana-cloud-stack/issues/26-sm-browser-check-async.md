@@ -1,0 +1,69 @@
+# Synthetic Monitoring browser check has never passed — async `check()`
+
+Status: ready-for-agent
+
+`shop-homepage-browser` (check id 86489) has failed **every** execution since it was
+created at 2026-08-07 09:22:20 +02:00. `gcx sm checks timeline 86489` returns ~87 points
+between 09:24 and 12:14, all `Value: 0`; `gcx sm checks status` reports
+`success: 0, status: FAILING`. The sibling `shop-health` check is fine.
+
+Cause — `infra/30-grafana-cloud/checks/browser-check.js:28` passes an async arrow to k6's
+built-in `check()`, which k6 v2 rejects outright. The rejection is unhandled and aborts
+the iteration:
+
+    27      check(page, {
+    28        'title contains shop name': async (p) => (await p.title()).length > 0,
+    29      });
+
+The reported `file:///script.k6:27:10` maps exactly: line 27, column 10 is the `(` of
+`check(`. The deployed script is byte-identical to the repo file (md5
+`8118c8f52161fce5041204f5dad3335a`, 997 bytes) — `synthetic-monitoring.tf:97` uses
+`file(...)` with no wrapping.
+
+**A second, latent defect at line 31**: `'page has rendered content': await
+page.locator('body').isVisible()` passes a resolved boolean rather than a function, so it
+is an eager value, not a lazy assertion. It is never reached today because line 27 aborts
+first — fix both together.
+
+## Fix
+
+    - import { check } from 'k6';
+    + import { check } from 'https://jslib.k6.io/k6-utils/1.5.0/index.js';
+    …
+    -     check(page, {
+    -       'title contains shop name': async (p) => (await p.title()).length > 0,
+    -     });
+    -     check(page, {
+    -       'page has rendered content': await page.locator('body').isVisible(),
+    -     });
+    +     await check(page, {
+    +       'title contains shop name': async (p) => (await p.title()).length > 0,
+    +       'page has rendered content': async (p) => await p.locator('body').isVisible(),
+    +     });
+
+jslib's `check` is documented as a drop-in replacement whose sets are "functions called
+and Promises awaited".
+
+**Unconfirmed: whether SM probes can egress to `jslib.k6.io`.** If they cannot, the
+no-remote-import alternative is to await first and pass plain values:
+
+    const title = await page.title();
+    const bodyVisible = await page.locator('body').isVisible();
+    check(page, {
+      'title contains shop name': () => title.length > 0,
+      'page has rendered content': () => bodyVisible,
+    });
+
+Try the jslib import first; fall back if the probe cannot reach it.
+
+Note the check body is stored inline in Grafana Cloud, so this needs a `tofu apply` of
+30-grafana-cloud to take effect — editing the file alone changes nothing.
+
+Done: `gcx sm checks status 86489` reports successes.
+
+## Comments
+
+2026-08-07: Filed from the issue-10 validation session. The in-cluster browser loop
+(`load/browser/shop-browser.js`) does **not** have this anti-pattern — its check callbacks
+are synchronous and no GoError appears in 6h of its logs. It has a different problem; see
+issue 27.
