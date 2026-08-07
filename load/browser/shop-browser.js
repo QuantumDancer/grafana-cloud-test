@@ -72,25 +72,46 @@ export default async function () {
 
     // --- product detail ---
     await safeStep('open a product', async () => {
-      const card = page.locator('.product-card').first();
+      // Skip out-of-stock cards. V2__seed_products.sql zeroes stock on ~5% of
+      // products on purpose (so the protocol-level loadgen has real 409s to
+      // hit), and a zero-stock product detail page renders "Out of stock"
+      // where the "Add to cart" button would be — which strands every step
+      // below it. The catalog query has no ORDER BY, so which product lands
+      // first is not stable: this loop was observed picking an in-stock one
+      // and, an hour later, a zero-stock one.
+      const card = page.locator('.product-card:not(:has(.product-card__stock--out))').first();
       await card.waitFor({ state: 'visible', timeout: 10000 });
       await card.click();
       await page.waitForSelector('.product-detail', { timeout: 10000 });
     });
 
     // --- cart ---
+    // Every interactive step from here down locates by ARIA role and
+    // accessible name. Playwright's `:has-text()` pseudo-selector is *not*
+    // available: k6/browser forwards a selector string straight to
+    // `document.querySelectorAll`, which rejects `:has-text()` as a syntax
+    // error — which is why the cart, checkout and lens-care steps had never
+    // once run (issue 27). Role locators are also the sturdier choice here,
+    // since they key off the accessible names the frontend's own tests
+    // already assert on rather than off markup structure.
     await safeStep('add to cart', async () => {
-      const addButton = page.locator('button:has-text("Add to cart")');
-      await addButton.click();
-      await page.locator('a:has-text("View cart")').click();
+      await page.getByRole('button', { name: 'Add to cart' }).click();
+      // "View cart" isn't on the page until the click above flips the product
+      // into its "Added to cart." confirmation — the link lives inside that
+      // confirmation — so it has to be waited for rather than assumed present.
+      const viewCart = page.getByRole('link', { name: 'View cart' });
+      await viewCart.waitFor({ state: 'visible', timeout: 10000 });
+      await viewCart.click();
       await page.waitForSelector('.cart', { timeout: 10000 });
     });
 
     // --- checkout ---
     await safeStep('checkout', async () => {
-      await page.locator('button:has-text("Proceed to checkout")').click();
+      await page.getByRole('button', { name: 'Proceed to checkout' }).click();
       await page.waitForSelector('.checkout', { timeout: 10000 });
-      await page.locator('button:has-text("Place order")').click();
+      // Note the button relabels itself to "Placing order…" while the request
+      // is in flight, so nothing past this click may match on "Place order".
+      await page.getByRole('button', { name: 'Place order' }).click();
       // Outcome is one of three planted possibilities (success / out of
       // stock / the ~2% payment-provider 500) — any of them is a completed,
       // Faro-worthy checkout interaction, so this just waits for *a*
@@ -105,7 +126,7 @@ export default async function () {
     if (Math.random() < 0.25) {
       await safeStep('trigger lens care guide error', async () => {
         await page.goto(`${TARGET_URL}/lens-care`, { waitUntil: 'networkidle' });
-        await page.locator('button:has-text("Load detailed coating chart")').click();
+        await page.getByRole('button', { name: 'Load detailed coating chart' }).click();
         // The click sets state that makes the *next render* throw (see the
         // frontend's LensCareGuidePage doc comment); FaroErrorBoundary
         // reports it to Faro and then renders its fallback — give both a

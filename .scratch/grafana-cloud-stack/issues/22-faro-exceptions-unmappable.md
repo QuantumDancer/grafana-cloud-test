@@ -73,6 +73,24 @@ are correct either way, but it is not confirmed.
 2026-08-07 triage: state confirmed as `ready-for-agent` — both causes name exact files and
 exact edits, and the done-criterion is observable.
 
+2026-08-07: **Cause B independently confirmed by direct DOM evidence** while closing issue
+27. A one-shot k6 probe drove `/lens-care` against the live site and dumped `#root` after
+the click; what renders is React Router's built-in boundary, not Faro's:
+
+    <h2>Unexpected Application Error!</h2>
+    <h3 style="font-style: italic;">Lens Care Guide: eyepiece coating chart failed to load (planted fault #1)</h3>
+    <pre>Error: … at RS (…/assets/index-BDhlgofM.js:33:131217) …</pre>
+
+`FaroErrorBoundary`'s `.app-crashed` fallback (`main.tsx:37`) never appears at all. This
+was previously inferred from the `console.error:` prefix on the 8 signals; it is now
+observed at the DOM. Nothing else in the analysis changes.
+
+**Issue 27 is now resolved, so this ticket is unblocked** — and its done-criterion is
+directly observable at last: the browser loop drives `/lens-care` on its own (~25 % of
+iterations), so "exactly one `kind=exception` signal" can be checked against automatic
+traffic rather than manual browsing. Note the loop only started producing this traffic on
+2026-08-07; signals older than that are still manual-browsing artefacts.
+
 **Depends on issue 27; land that first or together.** The done-criterion above is stated in
 terms of "triggering `/lens-care`", and issue 27 established that the in-cluster browser
 loop has never actually driven that route — its `:has-text()` selector at line 108 throws.

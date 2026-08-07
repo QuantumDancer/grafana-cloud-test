@@ -1,6 +1,6 @@
 # Browser loop's cart, checkout and lens-care steps have never run
 
-Status: ready-for-agent
+Status: resolved
 
 `load/browser/shop-browser.js` uses Playwright-only `:has-text()` pseudo-selectors, which
 k6/browser does not implement — it forwards them straight to `document.querySelectorAll`,
@@ -93,3 +93,37 @@ unfixed that criterion can only be checked by browsing manually. In the other di
 fixing 27 first means the loop starts hitting `/lens-care` while 22's console-derived
 triplicated errors are still in place, which is noisy but honest and self-correcting.
 Landing 27 first (or both together) is the cheaper order.
+
+2026-08-07 implemented and verified live. All five `:has-text()` selectors are now
+`getByRole`, and the deployed loop ran **7 consecutive iterations with zero step failures
+of any kind** (baseline: 11/11 iterations failed both `add to cart` and `checkout`). The
+`checks` threshold is no longer crossed.
+
+The ticket's fix section was correct but not sufficient — the selectors were only *half*
+the reason those steps never ran. With all five locators corrected the steps still failed,
+now with `timed out after 30s` on a locator that resolved properly
+(`internal:role=button[name='Add to cart'i]`) rather than a `SyntaxError`. Cause: line 75
+opens the **first** catalog card, `V2__seed_products.sql:68` zeroes stock on ~5 % of
+products deliberately, and a zero-stock detail page renders "Out of stock" *instead of* the
+Add to cart button (`ProductDetailPage.tsx:57`) — so there was nothing to click. This was
+not a latent risk but live at the time: the first card had shifted from id 10 (stock 156)
+to id 27 (stock 0) within an hour, because the catalog query has no `ORDER BY`. Line 75
+now selects `.product-card:not(:has(.product-card__stock--out))`. The absent `ORDER BY` is
+logged in SESSION.md as its own (unrelated, pre-existing) defect.
+
+The two ordering traps the ticket flagged were both real and are handled: "View cart" is
+waited for rather than assumed, and nothing after the "Place order" click matches on that
+name.
+
+**One done-criterion is met only in part, and issue 22 owns the remainder.** "Faro shows
+… the planted frontend error arriving without manual browsing" — the loop now drives
+`/lens-care` (frontend access log, `11:07:54`, no step failure) and the planted fault does
+fire, but it is still not reported to Faro as an exception. A one-shot k6 probe against
+the live site dumped the DOM after the click and got React Router's built-in boundary:
+
+    <h2>Unexpected Application Error!</h2>
+    <h3>Lens Care Guide: eyepiece coating chart failed to load (planted fault #1)</h3>
+
+not `FaroErrorBoundary`'s `.app-crashed` fallback. That is issue 22's Cause B exactly, now
+confirmed by direct DOM evidence rather than inferred from signal shape. Nothing in this
+ticket's scope can change it; issue 22's `errorElement` fix is what closes that half.
