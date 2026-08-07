@@ -41,6 +41,19 @@ spec:
       # the Deployment's implicit restartPolicy: Always on the Pod template
       # is what gives "continuous" load without k6 needing to loop
       # internally or this chart needing a CronJob.
+      #
+      # CONSEQUENCE, and it looks alarming on purpose-built dashboards: this
+      # container's restartCount climbs forever, roughly once an hour, for as
+      # long as the stack is up. That is success, not a crash loop. A healthy
+      # cycle terminates with exitCode 0 / reason "Completed" and the next
+      # container starts ~1s later, with no BackOff event; kubelet's
+      # exponential restart backoff never engages because a run lasts far
+      # longer than the interval at which that backoff resets. Before
+      # investigating a "restart-looping loadgen", check the exit code —
+      # anything non-zero is real (k6 exits 99 on a threshold breach, and an
+      # OOM kill would show reason "OOMKilled"). The cadence was 14 minutes
+      # (~100 restarts/day) until 2026-08-07, which was mistaken for a crash
+      # loop twice; it is now 55 minutes, matching the browser loop.
       containers:
         - name: k6
           image: {{ .Values.loadgen.image }}

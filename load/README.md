@@ -16,17 +16,26 @@ occasionally as a manual `k6 cloud` run against `https://shop.rottlr.de`
 | Checkout | `POST /api/orders` | ~30% of iterations | Random customer in `[1, 10000]`, 1-3 units of the last-viewed product. Tolerates `201` (placed), `409` (out of stock — a real possible outcome, not a bug), and `500` (`FAULT_CHECKOUT_ERRORS`'s simulated ~2% payment failure) as all "expected"; only genuinely unexpected statuses count against the error-rate metric. |
 | Order history | `GET /api/customers/{id}/orders` | ~20% of iterations | Random customer in `[1, 10000]`. This is the endpoint `FAULT_N_PLUS_ONE` lives on. |
 
-VUs ramp `1 → 5 → 0` over a 14-minute window (`options.scenarios.shop_traffic`,
-overridable via the `VUS` env var); every iteration also scales its own sleep
-duration by a `diurnalSleepMultiplier()` read from the wall-clock hour (full
-pace 09:00-21:00, half pace in the morning/evening shoulders, quarter pace
-00:00-06:00) — that's this script's time-of-day variation, chosen over a
+VUs are held flat at 5 for a 55-minute run (`options.scenarios.shop_traffic`,
+count overridable via the `VUS` env var); every iteration also scales its own
+sleep duration by a `diurnalSleepMultiplier()` read from the wall-clock hour
+(full pace 09:00-21:00, half pace in the morning/evening shoulders, quarter
+pace 00:00-06:00) — that's this script's time-of-day variation, chosen over a
 literal 24h stage ramp so the same script stays a short, cheap, restartable
 run both in-cluster and for an occasional `k6 cloud` invocation. See the
 in-cluster continuity mechanism note in `charts/shop/templates/loadgen.yaml`
 (the script's own bounded duration + the Pod's `restartPolicy: Always` is
 what makes this "continuous" over a multi-day baseline run, not an
 internal infinite loop).
+
+The flat VU count is deliberate and was a fix, not the original design: a
+`ramping-vus` scenario that drained to 0 VUs every 14 minutes put a periodic
+~75% trough in the Shop's request rate, which is a pattern Grafana Cloud's
+anomaly baselines would learn as if it were real. The script's header comment
+carries the measurements. The 55-minute duration is likewise load-bearing —
+it bounds k6's in-run memory growth, and `charts/shop/values.yaml` sizes the
+container's memory limit against it, so changing one means revisiting the
+other.
 
 Validated with `k6 inspect` (options/thresholds parse) and a real `k6 run`
 against a local stub HTTP server (see final report for the exact commands and

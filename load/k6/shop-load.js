@@ -91,18 +91,54 @@ function diurnalSleepMultiplier() {
 }
 
 export const options = {
+  // Nothing here ever reads a response body — every check inspects only
+  // `res.status`, and the custom Trends only read `res.timings` — so k6 can
+  // drop each body on arrival instead of retaining it. This is not a
+  // micro-optimization: in-process memory growth is what bounds how long one
+  // run can last (see `duration` below), so anything that slows that growth
+  // buys a longer, quieter restart cycle.
+  discardResponseBodies: true,
   scenarios: {
     shop_traffic: {
-      executor: 'ramping-vus',
-      startVUs: 1,
-      stages: [
-        { duration: '2m', target: Number(__ENV.VUS) || 5 }, // ramp up
-        { duration: '10m', target: Number(__ENV.VUS) || 5 }, // steady state
-        { duration: '2m', target: 0 }, // ramp down
-      ],
+      // constant-vus, deliberately NOT ramping-vus.
+      //
+      // A ramp that starts at 1 VU and drains back to 0 spends its first and
+      // last minutes well below steady state. Because the pod restarts the
+      // instant the scenario ends, that ramp is not a one-off warm-up and
+      // cool-down — it repeats for the entire life of a multi-day baseline
+      // run. Measured against the live stack on 2026-08-07 under the old
+      // 2m/10m/2m ramp: backend request rate collapsed from ~4.3/s to
+      // ~0.8-1.4/s for 3-4 minutes out of every 14, and some scrape
+      // intervals recorded no data at all — a perfectly periodic ~75%
+      // trough.
+      //
+      // That shape is actively harmful here. A sawtooth on a fixed 14-minute
+      // period is exactly what Grafana Cloud's anomaly baselines and
+      // forecasting learn from, so the ramp was teaching them a cycle this
+      // stack invented rather than the Shop's real behaviour — and its
+      // amplitude dwarfed the genuine time-of-day variation that
+      // diurnalSleepMultiplier() exists to produce. Holding VUs flat shrinks
+      // the per-cycle seam from ~4 minutes to the ~2-3s of container restart
+      // plus k6 startup.
+      executor: 'constant-vus',
+      vus: Number(__ENV.VUS) || 5,
+      // Bounded, and the bound is load-bearing rather than arbitrary: k6
+      // accumulates metric samples in memory for the whole run — measured at
+      // ~1.7 MiB/min steady state here, plus a step up while the end-of-test
+      // summary is computed — so the process exit IS the memory reset. See
+      // charts/shop/templates/loadgen.yaml on why exiting is how continuous
+      // load is achieved at all.
+      //
+      // 55m is chosen to match load/browser/shop-browser.js's identical
+      // cycle, so both in-cluster loops restart on one documented cadence,
+      // and to keep peak memory inside the container's budget with room to
+      // spare (charts/shop/values.yaml sizes the limit against this number —
+      // the two must move together).
+      duration: '55m',
       // Lets an in-flight iteration (e.g. mid-checkout) finish cleanly
-      // rather than being cut off when the scenario ramps down.
-      gracefulRampDown: '30s',
+      // rather than being cut off when the duration elapses. This is
+      // `gracefulStop`, not the `gracefulRampDown` that ramping-vus took.
+      gracefulStop: '30s',
     },
   },
   thresholds: {

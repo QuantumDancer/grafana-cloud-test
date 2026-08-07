@@ -224,13 +224,22 @@ loadgen:
   # scripts/deploy-shop.sh via `--set-file loadgen.script=load/k6/shop-load.js`.
   script: ""
 
+  # Sized against shop-load.js's scenario `duration`, and the two must move
+  # together: k6 holds every metric sample of a run in memory (~1.7 MiB/min
+  # measured live on 2026-08-07, plus a step up while the end-of-test summary
+  # is computed), and the process exit at the end of each run is what resets
+  # it. A 55m run lands near ~190 MiB at peak, so the limit is 512Mi rather
+  # than the 256Mi that suited the old 14m cycle — an OOM kill here would be
+  # a genuine crash loop, unlike the clean restarts this workload does by
+  # design. The request stays at 128Mi (a run spends most of its life well
+  # under the peak) so scheduling pressure is unchanged.
   resources:
     requests:
       cpu: 100m
       memory: 128Mi
     limits:
       cpu: 500m
-      memory: 256Mi
+      memory: 512Mi
 
 browserloop:
   enabled: true
