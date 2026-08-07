@@ -35,32 +35,60 @@ spec:
         # notices/reloads a running script anyway.
         checksum/script: {{ .Values.loadgen.script | sha256sum }}
     spec:
-      # k6's own process exit (whenever the script's scenario finishes its
-      # bounded duration — see shop-load.js's comment on why it isn't
-      # literally infinite) is exactly what should trigger the next run;
-      # the Deployment's implicit restartPolicy: Always on the Pod template
-      # is what gives "continuous" load without k6 needing to loop
-      # internally or this chart needing a CronJob.
+      # k6's scenario is bounded (see shop-load.js on why: the process exit is
+      # what resets k6's per-run metric memory), so something has to start the
+      # next run. That used to be the Pod's implicit restartPolicy: Always —
+      # k6 exited, the kubelet restarted the container, load continued.
       #
-      # CONSEQUENCE, and it looks alarming on purpose-built dashboards: this
-      # container's restartCount climbs forever, roughly once an hour, for as
-      # long as the stack is up. That is success, not a crash loop. A healthy
-      # cycle terminates with exitCode 0 / reason "Completed" and the next
-      # container starts ~1s later, with no BackOff event; kubelet's
-      # exponential restart backoff never engages because a run lasts far
-      # longer than the interval at which that backoff resets. Before
-      # investigating a "restart-looping loadgen", check the exit code —
-      # anything non-zero is real (k6 exits 99 on a threshold breach, and an
-      # OOM kill would show reason "OOMKilled"). The cadence was 14 minutes
-      # (~100 restarts/day) until 2026-08-07, which was mistaken for a crash
-      # loop twice; it is now 55 minutes, matching the browser loop.
+      # It worked, but it made restartCount climb forever, ~26 times a day. A
+      # perpetually-restarting container is indistinguishable from a crash
+      # loop to anything reading Kubernetes state: it was mistaken for one
+      # twice by humans, and Grafana Assistant independently flagged this pod
+      # as failing. On a stack whose whole purpose is demonstrating Grafana
+      # Cloud's observability, a workload that permanently trips the
+      # platform's own health heuristics is a defect in the demo.
+      #
+      # So the restart loop moved inside the container. Kubernetes now sees
+      # one long-lived process and a restartCount that stays at 0, while k6
+      # still gets a fresh process (and a fresh metrics heap) every 55m.
+      #
+      # A CronJob was the considered alternative and fits worse: cron cannot
+      # express a 55-minute period, so duration would have to be tuned to the
+      # schedule, with `Forbid` costing a whole hour of load whenever a run
+      # overruns and `Allow` producing overlapping double-load — reintroducing
+      # exactly the kind of periodic artifact issue 29 removed. It would also
+      # churn a new pod name every hour, fragmenting pod-scoped telemetry and
+      # leaving Completed pods behind.
+      terminationGracePeriodSeconds: 5
       containers:
         - name: k6
           image: {{ .Values.loadgen.image }}
           imagePullPolicy: {{ .Values.loadgen.pullPolicy }}
+          # Overrides the image's `k6` entrypoint so the loop below is PID 1.
+          command:
+            - /bin/sh
+            - -c
           args:
-            - run
-            - /scripts/shop-load.js
+            # Failure still has to be visible, which is why this is not a bare
+            # `while true`. k6 exiting 0 is the normal end of a 55m run, so the
+            # loop goes again; any non-zero code is a real fault (99 on a
+            # threshold breach, 107-ish on a config/script error) and is
+            # propagated so the container dies with it. That makes the restart
+            # signal *more* trustworthy than before, not less: previously every
+            # cycle and every genuine failure both showed up as a restart, so
+            # the signal carried no information. Now a non-zero restartCount
+            # means something is actually wrong.
+            #
+            # Note this loop deliberately does not forward SIGTERM to k6 — sh
+            # only runs traps between commands, so a delete would otherwise
+            # wait out the grace period. terminationGracePeriodSeconds above is
+            # set short instead: k6 has nothing worth shutting down cleanly
+            # here, and killing it mid-iteration is what already happened on
+            # every rollout.
+            - |
+              while true; do
+                k6 run /scripts/shop-load.js || exit $?
+              done
           env:
             # Empty by default: shop-load.js falls back to the in-cluster
             # backend Service DNS name itself when unset, so this only needs

@@ -228,11 +228,15 @@ loadgen:
   # together: k6 holds every metric sample of a run in memory (~1.7 MiB/min
   # measured live on 2026-08-07, plus a step up while the end-of-test summary
   # is computed), and the process exit at the end of each run is what resets
-  # it. A 55m run lands near ~190 MiB at peak, so the limit is 512Mi rather
-  # than the 256Mi that suited the old 14m cycle — an OOM kill here would be
-  # a genuine crash loop, unlike the clean restarts this workload does by
-  # design. The request stays at 128Mi (a run spends most of its life well
-  # under the peak) so scheduling pressure is unchanged.
+  # it. A 55m run projects to ~230 MiB at peak, so the limit is 512Mi rather
+  # than the 256Mi that suited the old 14m cycle. The request stays at 128Mi
+  # (a run spends most of its life well under the peak) so scheduling
+  # pressure is unchanged.
+  #
+  # Headroom matters more than usual here: the container now supervises its
+  # own run loop (see templates/loadgen.yaml), so its restart count is
+  # expected to stay at 0 and any restart at all is a real signal. An OOM
+  # kill would be the most likely way to produce a misleading one.
   resources:
     requests:
       cpu: 100m

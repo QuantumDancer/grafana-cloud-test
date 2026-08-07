@@ -1,10 +1,12 @@
 // Spyglass shop — primary k6 HTTP load scenario (issue 08).
 //
 // Runs identically in three places:
-//   1. In-cluster, continuously, via charts/shop's loadgen Deployment — see
-//      that template's comment on why a bounded (not literally infinite)
-//      scenario duration plus the Pod's implicit restartPolicy: Always is
-//      how "continuous" is achieved without this script looping forever.
+//   1. In-cluster, continuously, via charts/shop's loadgen Deployment, whose
+//      container re-runs this script in a shell loop — see that template's
+//      comment on why the scenario is bounded (the process exit is what
+//      resets k6's metrics memory) and why the loop that restarts it lives
+//      inside the container rather than being the kubelet restarting the
+//      whole thing.
 //   2. Manually via `k6 cloud` against https://shop.rottlr.de (occasional
 //      runs per the spec) — the same file is also `file()`-read directly by
 //      infra/30-grafana-cloud/k6.tf's `grafana_k6_load_test` resource.
@@ -77,12 +79,12 @@ function pick(list) {
 
 // Time-of-day traffic variation (issue 08): rather than encode a literal
 // 24-hour ramp into k6's stage durations — which would make one k6 process
-// lifetime *be* a day, awkward for both the bounded in-cluster restart cycle
-// and a short manual `k6 cloud` run — each iteration reads the wall-clock
-// hour and scales its own pacing. VU count stays constant (set by
+// lifetime *be* a day, awkward for both the bounded in-cluster run cycle and
+// a short manual `k6 cloud` run — each iteration reads the wall-clock hour
+// and scales its own pacing. VU count stays constant (set by
 // `options.scenarios`); this instead makes iterations faster/slower, which
-// is what actually varies request rate over real calendar time as the
-// container keeps restarting across a multi-day baseline run.
+// is what actually varies request rate over real calendar time as one run
+// succeeds another across a multi-day baseline run.
 function diurnalSleepMultiplier() {
   const hour = new Date().getHours();
   if (hour >= 9 && hour < 21) return 1; // daytime: full pace
@@ -125,12 +127,12 @@ export const options = {
       // Bounded, and the bound is load-bearing rather than arbitrary: k6
       // accumulates metric samples in memory for the whole run — measured at
       // ~1.7 MiB/min steady state here, plus a step up while the end-of-test
-      // summary is computed — so the process exit IS the memory reset. See
-      // charts/shop/templates/loadgen.yaml on why exiting is how continuous
-      // load is achieved at all.
+      // summary is computed — so the process exit IS the memory reset, and
+      // charts/shop/templates/loadgen.yaml's shell loop is what starts the
+      // next run about a second later.
       //
       // 55m is chosen to match load/browser/shop-browser.js's identical
-      // cycle, so both in-cluster loops restart on one documented cadence,
+      // cycle, so both in-cluster loops recycle on one documented cadence,
       // and to keep peak memory inside the container's budget with room to
       // spare (charts/shop/values.yaml sizes the limit against this number —
       // the two must move together).

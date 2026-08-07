@@ -24,9 +24,9 @@ pace 00:00-06:00) — that's this script's time-of-day variation, chosen over a
 literal 24h stage ramp so the same script stays a short, cheap, restartable
 run both in-cluster and for an occasional `k6 cloud` invocation. See the
 in-cluster continuity mechanism note in `charts/shop/templates/loadgen.yaml`
-(the script's own bounded duration + the Pod's `restartPolicy: Always` is
-what makes this "continuous" over a multi-day baseline run, not an
-internal infinite loop).
+— the script's bounded duration exists to reset k6's per-run metrics memory,
+and a shell loop *inside* the container re-runs it, so the pod stays up
+rather than relying on the kubelet restarting a container that keeps exiting.
 
 The flat VU count is deliberate and was a fix, not the original design: a
 `ramping-vus` scenario that drained to 0 VUs every 14 minutes put a periodic

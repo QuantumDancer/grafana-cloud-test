@@ -131,7 +131,69 @@ limit confirmed at 512Mi on the Deployment. Post-deploy request rate held flat a
 window that previously contained a trough — see the Comments below for the measured
 series.
 
+## Follow-up: the restart count itself, moved inside the container
+
+The fix above cut restarts from ~103/day to ~26/day but kept the mechanism — k6 exits, the
+kubelet restarts the container. That was still enough to be read as failure: **Grafana
+Assistant independently flagged the pod as failing**, matching the two human
+misdiagnoses. On a stack whose purpose is demonstrating Grafana Cloud's observability, a
+workload that permanently trips the platform's own health heuristics is a defect in the
+demo, so the restart loop moved inside the container:
+
+```sh
+while true; do k6 run /scripts/shop-load.js || exit $?; done
+```
+
+Kubernetes now sees one long-lived process with `restartCount` pinned at 0, while k6 still
+gets a fresh process — and a fresh metrics heap — every 55m. The `|| exit $?` is the load-
+bearing part: k6 exiting 0 is the normal end of a run and the loop continues, but any
+non-zero code (99 on a threshold breach, config/script errors) is propagated so the
+container dies with it. That makes the restart signal *more* informative than before rather
+than hiding failures — previously every normal cycle and every genuine fault both appeared
+as a restart, so the count carried no information at all; now any restart means something
+is actually wrong.
+
+`terminationGracePeriodSeconds: 5` compensates for the one downside: `sh` only runs traps
+between commands, so a plain loop will not forward SIGTERM to k6 and a delete would
+otherwise wait out the full grace period. k6 has nothing worth shutting down cleanly here.
+
+### Why not a CronJob
+
+It was the other option Assistant suggested, and it fits a *continuous* load generator
+badly:
+
+- Cron cannot express a 55-minute period. Duration would have to be tuned to an hourly
+  schedule, and then `concurrencyPolicy: Forbid` costs a whole hour of load whenever a run
+  overruns, while `Allow` produces overlapping double-load — reintroducing exactly the kind
+  of periodic artifact this issue exists to remove.
+- Every run needs pod scheduling and k6 startup, so there is a gap at every boundary —
+  worse on EKS Auto Mode, where a new pod can trigger node scale-up.
+- A new pod name every hour churns `kube_pod_*` series and fragments pod-scoped telemetry,
+  and retained `Completed` pods add their own confusion (SESSION.md already records one
+  such pod being mistaken for a problem).
+
+### Verification
+
+`shellcheck -s sh` clean. Exit-code propagation proven directly — a stub returning 0 three
+times then 42 looped three times and exited 42. In-cluster process tree confirms the
+shape:
+
+```
+PID   PPID  COMMAND
+    1     0 /bin/sh -c while true; do   k6 run /scripts/shop-load.js || exit $? done
+    8     1 k6 run /scripts/shop-load.js
+```
+
+Deployed as release revision 13.
+
 ## Comments
+
+Testability gap noticed here: the scenario `duration` is hardcoded `'55m'`, so verifying
+anything about the run-boundary behaviour means waiting 55 minutes, and the `k6 cloud`
+invocation in `infra/30-grafana-cloud/k6.tf` reads the same file and would run for 55
+minutes too. A `__ENV.DURATION` override (defaulting to `'55m'`) would make both cheap.
+Not done here — it widens the script's config surface for something this issue did not
+need — but worth doing if run-length ever needs tuning per environment.
 
 Note for whoever redeploys: `helm upgrade --reuse-values` reuses the previous release's
 *computed* values, which masks changed chart defaults — the first upgrade attempt here
