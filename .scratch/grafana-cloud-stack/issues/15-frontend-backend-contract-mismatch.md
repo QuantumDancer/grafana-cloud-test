@@ -107,3 +107,29 @@ Note for issue 10's "deobfuscated stack trace in Frontend O11y" check: the silve
 lining above is now spent — this crash will stop appearing once the fixed bundle
 deploys. The two frontend-owned planted faults (`/lens-care`, `/slow-page`) remain
 as intentional error sources for that check.
+
+### Deployed and verified live (2026-08-07)
+
+Commit `c333995` pushed to `main`; CI run 31163826210 green, including the source-map
+upload (`index-BDhlgofM.js.map`, bundle-id `c333995e411d…`). Deployed with
+`deploy-shop.sh --frontend-tag sha-c333995` (helm revision 2). The pinned tag matters:
+with the default `latest` the Deployment spec is unchanged, so helm computes no diff
+and never rolls the pod despite `pullPolicy: Always` — the trap issue 11 hit. Frontend
+and loadgen both rolled; backend and browserloop correctly untouched.
+
+The k6 fix needed no image — `--set-file loadgen.script` re-injects it from the working
+tree, and the chart's `checksum/script` pod annotation rolled the loadgen automatically.
+Confirmed in-cluster: the ConfigMap now reads
+`const CATEGORIES = ['', 'TELESCOPE', 'BINOCULARS', 'MAGNIFIER']`.
+
+Faro proves the crash is actually gone in a real browser. Over a 25-minute window
+spanning the rollout, querying `{app_id="6986"}` on the Grafana Cloud Loki:
+
+| app_version | signals | exceptions |
+|---|---|---|
+| `c333995…` (new) | 24, across `/` and `/products/1` | **0** |
+| `17ce414…` (old) | — | 18 |
+
+`/` is the exact route that threw on every load, and `/products/1` exercises the detail
+and reviews mapping. The old bundle's last recorded crash was 08:57:32 UTC, two minutes
+before the rollout.
