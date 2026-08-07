@@ -31,7 +31,7 @@ vitest suite still green.
 that returned CONFIRMED on issue 15 — deferred at the time because changing the reviewed
 bytes after the verdict would have invalidated the coverage that earned it.
 
-2026-08-07: Resolved in `6895de6`. Unknown customer now 404s with the backend's
+2026-08-07: Resolved in `04651d5`. Unknown customer now 404s with the backend's
 literal body — `{"error": "No customer with id N"}` per `ApiExceptionHandler` +
 `CustomerOrderService`, byte-identical — via `isSeededCustomerId` in
 `fixtures.ts`, which names the seeded 1–10000 range once. `totalPages` floor

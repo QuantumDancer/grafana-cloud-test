@@ -99,7 +99,7 @@ So with 27 unfixed, verifying this ticket means browsing to `/lens-care` by hand
 8 console-derived signals this ticket analyses therefore came from manual browsing, not
 from the loop, which is worth knowing before reasoning about their volume.
 
-2026-08-07: Both causes implemented in `a87afe5`; locally verified, live criterion
+2026-08-07: Both causes implemented in `60c250d`; locally verified, live criterion
 pending deploy. Cause A: `faro.ts` assigns
 `globalThis['__faroBundleId_spyglass-frontend']` from `VITE_APP_VERSION` before
 `initializeFaro`, guarded on non-empty, sharing an `APP_NAME` const with

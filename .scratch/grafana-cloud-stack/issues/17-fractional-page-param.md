@@ -30,7 +30,7 @@ Done: `?page=2.7` renders a page of products instead of the error banner; a unit
 returned CONFIRMED on issue 15 — deferred at the time because changing the reviewed bytes
 after the verdict would have invalidated the coverage that earned it.
 
-2026-08-07: Resolved in `98584a5`. `toWirePageNumber` now truncates
+2026-08-07: Resolved in `567f092`. `toWirePageNumber` now truncates
 (`Math.max(0, Math.trunc((page ?? 1) - 1))`); new `mapping.test.ts` covers the
 fractional case (2.7 → wire page 1) plus the pre-existing shift/floor/default
 behavior. A fresh-context verifier drove `?page=2.7` through the real mapping and
