@@ -1,6 +1,6 @@
 # Frontend: set Faro `app.version` for source-map matching
 
-Status: ready-for-agent
+Status: resolved
 
 CI uploads source maps tagged `--bundle-id ${{ github.sha }}` (frontend.yml), but runtime
 stack-trace deobfuscation needs the SDK to report a matching `app.version` — previously
@@ -29,6 +29,13 @@ source-map upload after the FARO_* CI vars are set also proves the
 `frontend-observability:*` token scopes on the `stack`-realm access policy work — the
 tofu apply of 30-grafana-cloud accepted them (2026-08-06), but the token has never been
 exercised.
+
+2026-08-07 (agent, final): RESOLVED end to end. Run 31159517951: "Sourcemaps uploaded
+successfully" (map `index-CCfP7k0Q.js.map`, bundle-id `17ce414…`). Frontend rolled to
+the matching image (pullPolicy Always + rollout restart); live site confirmed serving
+`index-CCfP7k0Q.js` with `app.version = 17ce414…` — served bundle, reported version,
+and uploaded map all agree. Only user-facing check left (issue 10): confirm a
+deobfuscated stack trace in Frontend O11y once the browser loop trips a frontend fault.
 
 2026-08-07 (agent, later): Token-scope question answered empirically. The `stack` realm
 itself was fine, but `frontend-observability:*` scopes do NOT authorize sourcemap
