@@ -24,7 +24,7 @@ output "cnpg_app_secret_name" {
     (username, password, dbname, host, port, uri, jdbc-uri keys), in the `shop` namespace.
   EOT
   # CNPG's own naming for the auto-generated app secret: <cluster>-app.
-  value       = "shop-db-app"
+  value = "shop-db-app"
 }
 
 output "cnpg_rw_service" {

@@ -29,7 +29,7 @@ variable "grafana_cloud_region" {
   # This account's stack and all its existing access policies live in
   # prod-eu-west-2 (verified in the portal, 2026-08-06) — new policies must be
   # created in the same region as the resources they grant access to.
-  default     = "prod-eu-west-2"
+  default = "prod-eu-west-2"
 }
 
 variable "grafana_user" {
