@@ -37,3 +37,25 @@ session — an ideal real-world test case for issue 10's "deobfuscated stack tra
 Frontend O11y" check (bundle `index-CCfP7k0Q.js`, uploaded map matches).
 
 ## Comments
+
+2026-08-07 (agent): Telemetry-side findings (user asked why the error is invisible in
+Frontend O11y; checked via gcx → Loki `{app_id="6986", kind="exception"}`):
+
+- The crash does NOT prevent Faro from sending — every crashed page load delivers
+  three exceptions. But `FaroErrorBoundary` never fires: react-router's built-in
+  route error boundary is nearer to the throw and catches first. The signals reach
+  Faro only via the console instrumentation (React Router `console.error`s the caught
+  error; Faro's default ConsoleInstrumentation converts `console.error` →
+  `pushError`), so every error name carries a `console.error:` prefix and each crash
+  is triple-reported (2× React Router messages + 1× raw TypeError). Consider a real
+  `errorElement` that calls `faro.api.pushError` once, or accept the noise.
+- Until 08:21 UTC all recorded crashes were from the pre-fix bundle
+  (`app_version=b937ad8`, `index-Bofb16TO.js`) which has NO uploaded source map —
+  nothing to deobfuscate. The 08:21:37 SM probe recorded the first crash on
+  `17ce414` (`index-CCfP7k0Q.js`), which does have its map uploaded.
+- All 38 Faro signals over 6 h are from the Synthetic Monitoring k6 browser
+  (`k6_isK6Browser=true`, Chrome 149). The user's real Firefox session sent
+  nothing — collector POSTs to
+  `faro-collector-prod-eu-west-2.grafana.net/collect/…` are evidently blocked
+  client-side (Firefox Enhanced Tracking Protection / ad-blocker), worth confirming
+  in devtools.
