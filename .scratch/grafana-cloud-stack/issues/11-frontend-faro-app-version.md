@@ -30,6 +30,14 @@ source-map upload after the FARO_* CI vars are set also proves the
 tofu apply of 30-grafana-cloud accepted them (2026-08-06), but the token has never been
 exercised.
 
+2026-08-07 (agent, later): Token-scope question answered empirically. The `stack` realm
+itself was fine, but `frontend-observability:*` scopes do NOT authorize sourcemap
+uploads — the API returned 401 "invalid scope requested"; uploads need their own
+`sourcemaps:read/write/delete` scope family (added to the policy in
+`frontend-observability.tf`; token value unchanged so the CI secret stays valid). Also
+fixed en route: faro-cli 0.11.0 only globs the top level of `--output-path`, so CI now
+uploads from `dist/assets` (Vite's actual map location).
+
 2026-08-07 (agent): Deployed and verified serving: the bundle at
 `https://shop.rottlr.de` contains the full commit sha (`b937ad8…`) as `app.version`.
 `faro_sourcemap_endpoint`/`faro_app_id`/`faro_sourcemap_token` outputs added to

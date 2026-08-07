@@ -17,7 +17,17 @@ resource "grafana_cloud_access_policy" "frontend_o11y" {
   name         = "frontend-o11y-spyglass"
   display_name = "Frontend Observability app management"
 
-  scopes = ["frontend-observability:read", "frontend-observability:write", "frontend-observability:delete", "stacks:read"]
+  # Two scope families because the token serves two consumers: the aliased
+  # provider below manages the o11y app (frontend-observability:*), and CI
+  # uploads source maps with the same token (sourcemaps:*). Found
+  # empirically 2026-08-07: the sourcemap API 401s ("invalid scope
+  # requested") on frontend-observability:* alone — upload rights are their
+  # own scope family, exactly as the sourcemap-upload docs list them.
+  scopes = [
+    "frontend-observability:read", "frontend-observability:write", "frontend-observability:delete",
+    "sourcemaps:read", "sourcemaps:write", "sourcemaps:delete",
+    "stacks:read",
+  ]
 
   realm {
     type       = "stack"
