@@ -28,10 +28,16 @@ backend's stdout specifically — not to disable `podLogsViaLoki` wholesale, sin
 only log source for every workload that is *not* OTel-instrumented (Postgres, Alloy,
 cert-manager, the loadgen).
 
-So this needs a namespace/pod exclusion in the `podLogsViaLoki` config in
-`infra/40-platform/k8s-monitoring.tf` (currently `:102-105`, carrying only `enabled` and
-`collector` — the exclusion knob is not present yet and needs looking up in the
-k8s-monitoring 4.3.2 chart's own values schema).
+The mechanism is settled by [ADR 0004](../../../docs/adr/0004-one-ingestion-path-per-signal.md)
+and researched in
+[the dual-ingestion note](../../../docs/research/logs-dual-ingestion-otlp-vs-pod-scrape.md).
+There is no first-class `excludePods` in `podLogsViaLoki` at 4.3.2; the fix is one
+`extraDiscoveryRules` entry in `infra/40-platform/k8s-monitoring.tf` dropping any pod
+annotated `telemetry.rottlr.de/logs: otlp`, plus that annotation and
+`resource.opentelemetry.io/service.name: spyglass-backend` on the backend's **pod template**
+(`charts/shop/templates/backend-deployment.yaml`) — the second so the workload keeps one
+identity across all three signals, since a scraped stream otherwise takes its `service_name`
+from the container name. `podLogsViaLoki` stays enabled by default.
 
 **Scope is the backend pod only.** The frontend does *not* have this duplication: its
 container is nginx serving static files with no OTel SDK and no `OTEL_*` env at all
@@ -40,7 +46,8 @@ and Faro reports straight to Grafana Cloud from the browser. The backend is the 
 dual-pathed workload in the namespace. Do not exclude the whole `shop` namespace — that
 would silence Postgres and the loadgen, which have no other log path.
 
-Done: a given backend log line appears exactly once in Loki, correlated to its trace.
+Done: a given backend log line appears exactly once in Loki, under
+`service_name="spyglass-backend"`, correlated to its trace.
 
 ## Comments
 
@@ -56,3 +63,13 @@ target. Checked `charts/shop/templates/frontend-deployment.yaml` directly: nginx
 static files, no `OTEL_*` env, so there is no second path to collide with the scrape.
 Recorded in the Fix section above rather than left for the implementing agent to
 rediscover.
+
+2026-08-07: Reframed from a one-pod fix into a platform policy, because the exclusion would
+otherwise have to be repeated for every OTel-instrumented workload. Both directions turned
+out to be enforceable at a single point — `applicationObservability.logs.enabled: false`
+drops OTLP logs collector-side in one line — so per-app burden stopped being the tiebreaker
+and capability decided instead: the pod scrape does no parsing at all, so matching what OTLP
+already delivers needs an MDC standard, an Alloy processing stage, and per-service App
+Observability query configuration in the Cloud UI. Decision and rejected alternatives are in
+ADR 0004; the evidence, including the exact relabel syntax and the `service_name` precedence
+chain, is in the research note. Scope grew by two annotations and one chart rule.

@@ -36,6 +36,18 @@ The tofu-managed in-cluster foundation: k8s-monitoring chart, CloudNativePG, cer
 Envoy Gateway, external-dns. Deployed and destroyed with the cluster, distinct from the Shop.
 _Avoid_: infra (that's the AWS layer), base
 
+**Service identity**:
+The name a workload is known by across every signal — traces, metrics and logs alike. It is
+the OTel `service.name` the application asserts about itself (`spyglass-backend`), never the
+Kubernetes workload name (`backend`). A workload declares it once; the Platform propagates it.
+_Avoid_: service name (ambiguous — the Kubernetes workload name is not it), job, app name
+
+**Instrumented workload**:
+A workload that emits its own telemetry over OTLP because it carries an OTel SDK. Distinct
+from every other workload in the cluster, whose telemetry the Platform collects on its behalf.
+A workload is one or the other for a given signal, never both.
+_Avoid_: OTel app, traced service
+
 **Load generator**:
 The in-cluster k6 workload that produces continuous HTTP/API traffic against the Shop
 backend.
