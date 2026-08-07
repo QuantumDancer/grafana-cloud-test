@@ -1,6 +1,6 @@
 # Push-triggered CI runs mysteriously absent (2026-08-06)
 
-Status: needs-info
+Status: wontfix
 
 Pushes `4da98b5` (touches `apps/frontend/**`, matches the workflow's path filter) and
 `0fc82b7` produced PushEvents on GitHub but *zero* workflow runs
@@ -17,3 +17,10 @@ needs-info because it is only diagnosable on recurrence. If it recurs:
 - Fall back to manual dispatch to unblock.
 
 Close as external/incident if the next several path-matching pushes trigger normally.
+
+## Comments
+
+2026-08-07 (agent): Closed as external. User confirms a GitHub Actions outage yesterday
+evening, since resolved; today's push `b937ad8` (path-matching via `43114dd`) triggered
+run 31156547218 immediately and it succeeded. Nothing to fix in this repo — the
+workaround note above stands if an incident ever recurs.

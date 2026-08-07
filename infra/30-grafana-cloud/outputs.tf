@@ -75,6 +75,28 @@ output "faro_collector_endpoint" {
   value       = grafana_frontend_o11y_app.spyglass.collector_endpoint
 }
 
+# The three values CI's source-map upload step needs (frontend.yml):
+# FARO_SOURCEMAP_ENDPOINT / FARO_APP_ID repo variables + FARO_SOURCEMAP_TOKEN
+# secret (FARO_STACK_ID is the stack_id output above). The API host is
+# derived from the stack region — it's a different host from the collector
+# endpoint (faro-api vs faro-collector) and the provider doesn't expose it
+# as a resource attribute.
+output "faro_sourcemap_endpoint" {
+  description = "Faro source-map API endpoint for faro-cli uploads — CI's FARO_SOURCEMAP_ENDPOINT repository variable."
+  value       = "https://faro-api-${var.grafana_cloud_region}.grafana.net/faro/api/v1"
+}
+
+output "faro_app_id" {
+  description = "Frontend Observability app id for \"spyglass\" — CI's FARO_APP_ID repository variable."
+  value       = tostring(grafana_frontend_o11y_app.spyglass.id)
+}
+
+output "faro_sourcemap_token" {
+  description = "frontend-o11y access-policy token — CI's FARO_SOURCEMAP_TOKEN repository secret."
+  value       = grafana_cloud_access_policy_token.frontend_o11y.token
+  sensitive   = true
+}
+
 output "k6_project_id" {
   description = "k6 Cloud project id for the \"spyglass\" project — read by `k6 cloud`/scripts to target manual load-test runs."
   value       = grafana_k6_project.spyglass.id

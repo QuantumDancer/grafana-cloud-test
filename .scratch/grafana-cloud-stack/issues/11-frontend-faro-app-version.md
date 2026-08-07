@@ -29,3 +29,11 @@ source-map upload after the FARO_* CI vars are set also proves the
 `frontend-observability:*` token scopes on the `stack`-realm access policy work — the
 tofu apply of 30-grafana-cloud accepted them (2026-08-06), but the token has never been
 exercised.
+
+2026-08-07 (agent): Deployed and verified serving: the bundle at
+`https://shop.rottlr.de` contains the full commit sha (`b937ad8…`) as `app.version`.
+`faro_sourcemap_endpoint`/`faro_app_id`/`faro_sourcemap_token` outputs added to
+30-grafana-cloud (in state at next apply). Still open: the FARO_* repo vars + secret
+must be set by the user (agent's gh PAT got 403 on `gh variable set`), then a frontend
+workflow run must show the upload step succeed — that closes this and the token-scope
+question.
