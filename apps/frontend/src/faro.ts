@@ -59,6 +59,18 @@ export function initFaro(config: RuntimeConfig): void {
       environment: config.appEnvironment,
       version: import.meta.env.VITE_APP_VERSION || undefined,
     },
+    // Without this, every console.error becomes its own kind=exception
+    // signal. Observed live on the first deploy of the RouteErrorBoundary
+    // fix: one /lens-care crash produced three exceptions — the real
+    // pushError plus two console captures, because React 19's default
+    // onCaughtError and React Router's componentDidCatch each log the caught
+    // error to console.error in production, and neither can be silenced at
+    // its source. Routing console.error to a kind=log (level=error) signal
+    // keeps the text observable while leaving exactly one exception per
+    // crash, which is what the issue-22 done-criterion demands.
+    consoleInstrumentation: {
+      consoleErrorAsLog: true,
+    },
     instrumentations: [
       ...getWebInstrumentations(),
       new TracingInstrumentation({
