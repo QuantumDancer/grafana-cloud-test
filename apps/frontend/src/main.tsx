@@ -29,9 +29,14 @@ async function enableMockBackendIfNeeded(): Promise<void> {
 function renderApp() {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      {/* Reports the error to Faro, then renders the fallback — this must be
-          the outermost boundary so no other component can swallow an error
-          before Faro sees it (see faults planted in LensCareGuidePage). */}
+      {/* Safety net only: route-render errors (e.g. the fault planted in
+          LensCareGuidePage) are caught and reported by router.tsx's
+          errorElement (RouteErrorBoundary) before they ever reach here —
+          React Router's own boundary sits between this component and the
+          route tree, and always wins the race. This boundary still matters
+          for errors thrown outside the router entirely, e.g. during
+          CartProvider/CustomerProvider render, where there is no route
+          boundary to catch them. */}
       <FaroErrorBoundary
         fallback={(error) => (
           <div className="app-crashed">

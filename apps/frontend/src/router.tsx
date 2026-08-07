@@ -1,6 +1,7 @@
 import { withFaroRouterInstrumentation } from '@grafana/faro-react';
 import { createBrowserRouter } from 'react-router-dom';
 import { Layout } from './components/Layout';
+import { RouteErrorBoundary } from './components/RouteErrorBoundary';
 import { CartPage } from './routes/CartPage';
 import { CatalogPage } from './routes/CatalogPage';
 import { CheckoutPage } from './routes/CheckoutPage';
@@ -14,6 +15,13 @@ const dataRouter = createBrowserRouter([
   {
     path: '/',
     element: <Layout />,
+    // React Router's own boundary catches render/loader/action errors before
+    // `FaroErrorBoundary` (mounted in main.tsx, outside <RouterProvider>) ever
+    // sees them — without an errorElement here, Faro only learns about a
+    // crash secondhand via console.error, as a triplicated, unmappable
+    // console-capture signal instead of a single real exception. See
+    // RouteErrorBoundary for the reporting side of this fix.
+    errorElement: <RouteErrorBoundary />,
     children: [
       { index: true, element: <CatalogPage /> },
       { path: 'products/:id', element: <ProductDetailPage /> },
