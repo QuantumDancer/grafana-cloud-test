@@ -29,12 +29,18 @@ resource "random_password" "db_o11y" {
   special = false
 }
 
-# `postInitSQL` runs as the PostgreSQL superuser during cluster bootstrap, so it's the only place
-# we can create a second role beyond the `owner` CNPG's `initdb` bootstrap creates automatically.
-# Per CNPG's own docs, treat this with care: a mistake here breaks bootstrap for the whole cluster.
+# Both bootstrap SQL hooks below run as the PostgreSQL superuser during cluster bootstrap, which is
+# what lets us set up a second role beyond the `owner` CNPG's `initdb` bootstrap creates
+# automatically. They differ in which database the superuser is connected to, and that difference
+# is load-bearing — see the two lists in `bootstrap.initdb`. Per CNPG's own docs, treat both with
+# care: a mistake here breaks bootstrap for the whole cluster.
 resource "kubectl_manifest" "shop_db" {
   server_side_apply = true
-  # postInitSQL interpolates the db-o11y password — keep it out of plan output.
+  # postInitSQL interpolates the db-o11y password — keep it out of plan output. That is also why the
+  # `CREATE USER ... PASSWORD` statement has to stay in `postInitSQL` specifically: `sensitive_fields`
+  # names that one field, so the same statement moved into any sibling list would put the generated
+  # password straight into plan output. postInitApplicationSQL carries no secret and is deliberately
+  # not listed here.
   sensitive_fields = ["spec.bootstrap.initdb.postInitSQL"]
   yaml_body = yamlencode({
     apiVersion = "postgresql.cnpg.io/v1"
@@ -81,6 +87,33 @@ resource "kubectl_manifest" "shop_db" {
             "CREATE USER \"db-o11y\" WITH PASSWORD '${random_password.db_o11y.result}'",
             "GRANT pg_monitor TO \"db-o11y\"",
             "GRANT pg_read_all_stats TO \"db-o11y\"",
+          ]
+          # Database Observability's explain plans need the same privileges PostgreSQL would need to
+          # run the query itself, so `db-o11y` needs SELECT on the application's tables; the two
+          # statistics roles above cover none of that. Three things about this list are easy to get
+          # wrong and worth spelling out:
+          #
+          # - It is `postInitApplicationSQL`, not a fourth entry in `postInitSQL`. CNPG runs
+          #   `postInitSQL` connected to the `postgres` maintenance database, where these grants
+          #   would silently apply to that database's own (empty) `public` schema and never reach
+          #   the app's tables. `postInitApplicationSQL` runs against the application database
+          #   `shop`, which is where schema-scoped grants have to land.
+          # - `FOR ROLE "shop"` is what makes the third statement work at all. Bootstrap happens
+          #   before Flyway migrates, so no application table exists yet — the second statement is a
+          #   no-op on a fresh cluster and is kept only so this list states the full intent (and
+          #   matches the statements applied out-of-band to the already-running cluster). All the
+          #   real work is the default-privileges entry, and default privileges attach to the role
+          #   that creates the objects. Flyway connects as `shop`, so without `FOR ROLE "shop"` the
+          #   entry would only cover objects the superuser creates and every migrated table would
+          #   come out unreadable again.
+          # - Giving a monitoring role a full read of the application's data is a genuine widening
+          #   of its blast radius, accepted at triage because every row in this stack is synthetic —
+          #   not because SELECT is somehow harmless. Keep it at exactly these three statements: no
+          #   GRANT ALL, no ownership change, no `pg_read_all_data`, nothing outside schema `public`.
+          postInitApplicationSQL = [
+            "GRANT USAGE ON SCHEMA public TO \"db-o11y\"",
+            "GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"db-o11y\"",
+            "ALTER DEFAULT PRIVILEGES FOR ROLE \"shop\" IN SCHEMA public GRANT SELECT ON TABLES TO \"db-o11y\"",
           ]
         }
       }
