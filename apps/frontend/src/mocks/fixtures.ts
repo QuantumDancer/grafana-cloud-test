@@ -62,3 +62,15 @@ export function nextOrderIdSequence(): number {
 export function findProduct(id: number): WireProductDetail | undefined {
   return PRODUCTS.find((p) => p.id === id);
 }
+
+// There's no `customers` table in this mock — checkout invents a customer id
+// client-side (see `CheckoutPage.tsx`) rather than registering one — but the
+// backend still only recognizes ids it seeded, and 404s for anything outside
+// that range. `randomCustomerId` and the order-history form both already
+// scope themselves to [1, 10000]; this is that same range, named once so the
+// handler's "does this id exist" check doesn't hardcode a second copy of it.
+export const SEEDED_CUSTOMER_ID_MAX = 10000;
+
+export function isSeededCustomerId(id: number): boolean {
+  return Number.isInteger(id) && id >= 1 && id <= SEEDED_CUSTOMER_ID_MAX;
+}

@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import type { OrderRequest } from '../types/domain';
 import type { WireCategory, WireOrder, WirePage, WireProductDetail, WireProductSummary, WireReview } from '../types/wire';
-import { findProduct, nextOrderIdSequence, ORDERS, PRODUCTS, REVIEWS } from './fixtures';
+import { findProduct, isSeededCustomerId, nextOrderIdSequence, ORDERS, PRODUCTS, REVIEWS } from './fixtures';
 
 // This module stands in for the Spring Boot backend whenever the app runs
 // without one — local dev with no VITE_BACKEND_URL configured, and every
@@ -49,7 +49,10 @@ function toSummary(product: WireProductDetail): WireProductSummary {
  *  fields are never read by the client, but emitting the real envelope means
  *  the mock can't quietly be easier to consume than the backend. */
 function toPage(content: WireProductSummary[], number: number, totalElements: number) {
-  const totalPages = Math.max(1, Math.ceil(totalElements / PAGE_SIZE));
+  // No floor of 1: the backend reports 0 pages for an empty result, not a
+  // single empty one — pagination controls elsewhere already gate on `> 1`
+  // rather than relying on this being nonzero.
+  const totalPages = Math.ceil(totalElements / PAGE_SIZE);
   const sort = { empty: true, sorted: false, unsorted: true };
   return {
     content,
@@ -162,6 +165,13 @@ export const handlers = [
 
   http.get('/api/customers/:customerId/orders', ({ params }) => {
     const customerId = Number(params.customerId);
+    // The backend 404s for a customer id it never seeded, rather than
+    // returning an empty order list — mirroring that here is what would have
+    // caught issue 15's class of bug: a mock that's easier to succeed against
+    // than the real API lets a test suite stay green over a broken contract.
+    if (!isSeededCustomerId(customerId)) {
+      return HttpResponse.json({ error: `No customer with id ${params.customerId}` }, { status: 404 });
+    }
     return HttpResponse.json(ORDERS.filter((o) => o.customerId === customerId));
   }),
 ];
