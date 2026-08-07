@@ -1,6 +1,6 @@
 # Backend logs are ingested twice, under two different service names
 
-Status: ready-for-agent
+Status: resolved
 
 Every backend log line reaches Grafana Cloud through two independent paths:
 
@@ -64,13 +64,9 @@ static files, no `OTEL_*` env, so there is no second path to collide with the sc
 Recorded in the Fix section above rather than left for the implementing agent to
 rediscover.
 
-2026-08-07: Implemented on branch `worktree-issue-24-single-log-path` — the
-`podLogsViaLoki.extraDiscoveryRules` drop rule in `infra/40-platform/k8s-monitoring.tf` and
-both pod-template annotations in `charts/shop/templates/backend-deployment.yaml`. Status
-stays `ready-for-agent` rather than `resolved` because the Done criterion is a live check
-and nothing is deployed yet: local tofu state (ADR-0001) lives in the main checkout, so
-neither `tofu apply` nor `scripts/deploy-shop.sh` — which reads its values from `tofu
-output` — can run from a worktree.
+2026-08-07: Implemented — the `podLogsViaLoki.extraDiscoveryRules` drop rule in
+`infra/40-platform/k8s-monitoring.tf` and both pod-template annotations in
+`charts/shop/templates/backend-deployment.yaml`.
 
 Both halves were render-verified rather than reasoned about, since ADR-0004 warns that both
 fail *silently*. `helm template` puts the annotations under `spec.template.metadata.annotations`
@@ -81,11 +77,36 @@ k8s-monitoring 4.3.2 with the same values puts the rule last inside
 comparison: the running backend pod carries no annotations, and the deployed
 `k8s-monitoring-alloy-logs` config holds only the chart's built-in falsy-annotation rule.
 
-The acceptance check to run after `scripts/start.sh` and `scripts/deploy-shop.sh`:
-`{namespace="shop", container="backend"}` should return nothing at all, while
-`{service_name="spyglass-backend"}` still returns backend lines carrying `trace_id` —
-one line, one path, one name. The drift alert ADR-0004 asks for is *not* part of this
-ticket; it is TODO-marked at the enforcement site in `k8s-monitoring.tf`.
+**Done-criterion met, verified live.** Applied to the running cluster (1 in-place helm
+release change, nothing destroyed) and the Shop redeployed at revision 8. Both `alloy-logs`
+collectors hot-reloaded the new rule at 13:14:56 and 13:15:18 UTC without restarting.
+
+The decisive evidence is that the *new* backend pod was never scraped at all — not "scraped
+less". `{namespace="shop", container="backend", pod="spyglass-backend-57c9d5bd8f-w47wn"}`
+returns **0 lines** over the whole window, so the rollout and the rule landed in an order
+that produced no overlap and therefore no transiently duplicated lines. The old pod's scrape
+stops dead at 13:15:39; `{service_name="backend"}` — the split identity this ticket is named
+for — is empty in steady state.
+
+The surviving path is the right one: `{service_name="spyglass-backend"}` carries the same
+application's lines from the same new pod, with `trace_id`/`span_id`, `service_namespace=shop`
+and a bare message body rather than the Spring console format. Those lines were emitted on
+`thread_name=http-nio-8080-exec-7` — while serving a request, after startup, through the
+already-reconfigured collector — so this is steady-state behaviour, not a startup artifact.
+
+Blast radius confirmed to be exactly one pod: postgres, the load generator, the browser loop
+and the frontend all still produce scraped logs, every namespace that was producing logs
+still is (cert-manager looks absent over a 5-minute window but is present over 6 hours — it
+is idle, not silenced), and exactly one pod cluster-wide carries the exclusion annotation.
+
+Worth knowing for the next check: the backend has no logging of its own — every exception is
+handled by `ApiExceptionHandler` — so the OTLP stream is legitimately silent for long
+stretches. Emptiness there is the app being quiet, not the path being broken. Verification
+scripts are in `tmp/` (not tracked); they query Loki through the Grafana datasource proxy
+because `destinations_token` carries `logs:write` but not `logs:read` (see SESSION.md).
+
+The drift alert ADR-0004 asks for is *not* part of this ticket; it is TODO-marked at the
+enforcement site in `k8s-monitoring.tf`.
 
 2026-08-07: Reframed from a one-pod fix into a platform policy, because the exclusion would
 otherwise have to be repeated for every OTel-instrumented workload. Both directions turned
