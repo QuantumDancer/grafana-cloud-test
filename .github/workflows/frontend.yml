@@ -133,6 +133,10 @@ jobs:
       # bundle-id is pinned to the commit sha, which is also what the runtime
       # reports as Faro `app.version` (VITE_APP_VERSION above) — that equality
       # is how Faro pairs minified runtime stack traces with these maps.
+      # output-path must be dist/assets, not dist: faro-cli 0.11.0 (current)
+      # only globs *.map at the top level of the given directory, and Vite
+      # emits maps next to the bundles under assets/ (found the hard way on
+      # the first non-skipped run of this step).
       - name: Upload source maps to Grafana Faro
         if: steps.faro.outputs.configured == 'true'
         env:
@@ -148,5 +152,5 @@ jobs:
             --stack-id "$FARO_STACK_ID" \
             --app-name spyglass-frontend \
             --bundle-id "${{ github.sha }}" \
-            --output-path dist \
+            --output-path dist/assets \
             --verbose
