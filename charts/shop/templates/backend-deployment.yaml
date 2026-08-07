@@ -17,6 +17,22 @@ spec:
       labels:
         app.kubernetes.io/component: backend
         app.kubernetes.io/instance: {{ .Release.Name }}
+      # Both annotations belong here on the *pod* template, not on the Deployment's own
+      # metadata: Alloy reads them off the Pod object, and one in the wrong metadata block
+      # fails silently — the logs simply keep arriving twice.
+      annotations:
+        # "I ship my own logs over OTLP." The javaagent's logback appender already sends every
+        # line to the applicationObservability receiver, so this tells the Platform not to tail
+        # this container's stdout as well (ADR-0004; the matching drop rule is the
+        # `podLogsViaLoki.extraDiscoveryRules` entry in infra/40-platform/k8s-monitoring.tf).
+        telemetry.rottlr.de/logs: otlp
+        # "This is who I am." Separate from the line above on purpose — see the ADR — and set
+        # even though nothing scrapes this pod today: it is what the chart's `service_name`
+        # chain consults first, ahead of the `app.kubernetes.io/name` label and the container
+        # name, so if the drop rule above is ever lifted the stream arrives as spyglass-backend
+        # rather than reviving the split identity as `backend`. OTEL_SERVICE_NAME below carries
+        # the same value to the SDK; both read the one definition in values.yaml.
+        resource.opentelemetry.io/service.name: {{ .Values.backend.otel.serviceName | quote }}
     spec:
       containers:
         - name: backend

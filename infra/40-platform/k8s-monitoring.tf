@@ -144,9 +144,38 @@ resource "helm_release" "k8s_monitoring" {
         collector = "alloy-metrics"
       }
 
+      # Stays enabled by default: it is the only log source for every workload that carries no
+      # OTel SDK — Postgres, Alloy itself, cert-manager, the load generator, the browser loop —
+      # none of which would cooperate with an opt-in scheme.
       podLogsViaLoki = {
         enabled   = true
         collector = "alloy-logs"
+
+        # The one place ADR-0004's "one ingestion path per signal" rule is enforced: a workload
+        # that ships its own logs over OTLP declares so with `telemetry.rottlr.de/logs: otlp` on
+        # its pod template, and this rule stops the scraper from ingesting the same lines a
+        # second time under a second identity. Currently claimed by the backend only
+        # (`charts/shop/templates/backend-deployment.yaml`). Do not fold this key into the
+        # `resource.opentelemetry.io/service.name` annotation sitting right beside it there,
+        # tempting as the saved line is — ADR-0004 has the argument, and OTel Python is the
+        # case that breaks it.
+        #
+        # TODO(drift): nothing detects a workload that quietly reacquires both paths — Adaptive
+        # Logs has no concept of duplication and Loki's dedup never collapses two differently
+        # shaped copies. ADR-0004 calls for a Loki alert on this; the cheap form is asserting
+        # that `{namespace="shop", container="backend"}` stays empty. Not built yet.
+        #
+        # `extraDiscoveryRules` is raw Alloy appended verbatim to the end of
+        # `discovery.relabel "filtered_pods"`, so this runs after the chart's own rules and the
+        # annotation name arrives escaped the Prometheus way: `-`, `.` and `/` all become `_`.
+        # Alloy anchors relabel regexes, so this matches the value `otlp` and nothing else.
+        extraDiscoveryRules = <<-EOT
+          rule {
+            source_labels = ["__meta_kubernetes_pod_annotation_telemetry_rottlr_de_logs"]
+            regex         = "otlp"
+            action        = "drop"
+          }
+        EOT
       }
 
       # Opens the OTLP gRPC/HTTP receivers the shop app's OTel SDK sends to (see outputs.tf for

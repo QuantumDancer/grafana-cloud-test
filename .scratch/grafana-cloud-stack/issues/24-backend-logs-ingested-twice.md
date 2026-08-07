@@ -64,6 +64,29 @@ static files, no `OTEL_*` env, so there is no second path to collide with the sc
 Recorded in the Fix section above rather than left for the implementing agent to
 rediscover.
 
+2026-08-07: Implemented on branch `worktree-issue-24-single-log-path` — the
+`podLogsViaLoki.extraDiscoveryRules` drop rule in `infra/40-platform/k8s-monitoring.tf` and
+both pod-template annotations in `charts/shop/templates/backend-deployment.yaml`. Status
+stays `ready-for-agent` rather than `resolved` because the Done criterion is a live check
+and nothing is deployed yet: local tofu state (ADR-0001) lives in the main checkout, so
+neither `tofu apply` nor `scripts/deploy-shop.sh` — which reads its values from `tofu
+output` — can run from a worktree.
+
+Both halves were render-verified rather than reasoned about, since ADR-0004 warns that both
+fail *silently*. `helm template` puts the annotations under `spec.template.metadata.annotations`
+with the service identity resolved from `backend.otel.serviceName`; templating upstream
+k8s-monitoring 4.3.2 with the same values puts the rule last inside
+`discovery.relabel "filtered_pods"`, with `telemetry.rottlr.de/logs` escaped to
+`__meta_kubernetes_pod_annotation_telemetry_rottlr_de_logs`. Live baseline captured for
+comparison: the running backend pod carries no annotations, and the deployed
+`k8s-monitoring-alloy-logs` config holds only the chart's built-in falsy-annotation rule.
+
+The acceptance check to run after `scripts/start.sh` and `scripts/deploy-shop.sh`:
+`{namespace="shop", container="backend"}` should return nothing at all, while
+`{service_name="spyglass-backend"}` still returns backend lines carrying `trace_id` —
+one line, one path, one name. The drift alert ADR-0004 asks for is *not* part of this
+ticket; it is TODO-marked at the enforcement site in `k8s-monitoring.tf`.
+
 2026-08-07: Reframed from a one-pod fix into a platform policy, because the exclusion would
 otherwise have to be repeated for every OTel-instrumented workload. Both directions turned
 out to be enforceable at a single point — `applicationObservability.logs.enabled: false`
