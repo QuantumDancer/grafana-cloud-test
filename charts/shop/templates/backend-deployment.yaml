@@ -66,6 +66,10 @@ spec:
               value: {{ .Values.backend.otel.serviceName | quote }}
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: {{ .Values.backend.otel.resourceAttributes | quote }}
+            - name: OTEL_INSTRUMENTATION_COMMON_PEER_SERVICE_MAPPING
+              value: {{ .Values.backend.otel.peerServiceMapping | quote }}
+            - name: OTEL_SEMCONV_STABILITY_OPT_IN
+              value: {{ .Values.backend.otel.semconvStabilityOptIn | quote }}
 
             # --- Planted faults (all default ON; see application.yml's relaxed binding) ---
             - name: FAULT_SLOW_SEARCH

@@ -36,6 +36,11 @@ ENV OTEL_SERVICE_NAME="spyglass-backend"
 ENV OTEL_RESOURCE_ATTRIBUTES="service.namespace=shop,deployment.environment=test"
 ENV OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318"
 ENV OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
+ENV OTEL_SEMCONV_STABILITY_OPT_IN="database/dup"
+# Deliberately no OTEL_INSTRUMENTATION_COMMON_PEER_SERVICE_MAPPING default here:
+# the chart's mapping (charts/shop/values.yaml) points at the in-cluster
+# "shop-db-rw.shop" Service DNS name, which is meaningless outside the
+# cluster — a local run has no such host to match against.
 
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

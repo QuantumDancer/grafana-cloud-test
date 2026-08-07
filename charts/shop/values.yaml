@@ -97,6 +97,35 @@ backend:
     endpoint: http://k8s-monitoring-alloy-metrics.monitoring.svc.cluster.local:4318
     resourceAttributes: service.namespace=shop,deployment.environment=test
 
+    # Tempo's service-graph processor resolves a DB peer's node name in the
+    # order peer.service -> server.address -> network.peer.address:port ->
+    # db.namespace -> db.name. Our JDBC spans only carry
+    # server.address=shop-db-rw.shop (the k8s Service DNS name), so without
+    # this the DB node renders under that instead of a real database name.
+    # peer.service is first in the resolution order, so setting it wins.
+    # Use exactly "shop-db" (not the Service name) because that's the
+    # instance name Database Observability itself registers
+    # (infra/40-platform/k8s-monitoring.tf:200) — matching it lets both
+    # products refer to the same database under one identity.
+    peerServiceMapping: "shop-db-rw.shop:5432=shop-db"
+
+    # The javaagent still emits pre-stable db attributes (db.statement,
+    # db.sql.table). Alloy's set_semconv_span_name("1.37.0", ...) transform
+    # names JDBC spans from the *stable* db.query.summary/db.collection.name
+    # instead, so without this opt-in every span degrades to "SELECT shop"
+    # rather than e.g. "SELECT order_items". The opt-in also adds
+    # db.query.text (and friends), which is what would let a span link back
+    # to its recorded query sample in Database Observability.
+    #
+    # "database/dup" rather than bare "database": bare *replaces* the
+    # pre-stable attributes, which removes db.system — and the service
+    # graph's connection_type=database classification is derived from
+    # db.system. If Grafana Cloud's metrics-generator doesn't yet read the
+    # stable db.system.name, the DB node would lose its database
+    # classification entirely. "/dup" emits both old and new attributes, so
+    # existing behavior can't regress — the safe way to roll this out.
+    semconvStabilityOptIn: "database/dup"
+
   # Planted-fault toggles (issue spec, all default ON). Mirrors the
   # backend's own application.yml defaults explicitly here so the chart is a
   # complete, self-documenting control surface for demo purposes — a values
